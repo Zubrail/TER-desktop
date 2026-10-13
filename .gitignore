@@ -1,0 +1,16 @@
+# Vendored upstream v2rayN clone (GPL-3.0, re-clone with:
+#   git clone --depth 1 https://github.com/2dust/v2rayN upstream )
+# Kept on disk for inspection/branding but NOT committed to this scaffolding repo.
+# build output / backups
+**/*.bak
+bin/
+obj/
+# local packaging tools (dmgbuild venv)
+.tools/
+# runetfreedom geo files + cores are downloaded, not committed
+cores/
+dist/
+.livetest/
+.tools
+cores
+__pycache__/

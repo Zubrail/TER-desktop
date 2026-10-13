@@ -1,0 +1,77 @@
+<ResourceDictionary
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        TeRMiTuS design-D palette (see app_spec/TZ.md §10.2).
+        Brushes switch automatically with the system theme via ThemeDictionaries.
+        Reference from XAML with {DynamicResource TermXxx}.
+    -->
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- Dark (also the Default fallback) -->
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="TermBg" Color="#0E0E10" />
+            <SolidColorBrush x:Key="TermSurface" Color="#1A1A1D" />
+            <SolidColorBrush x:Key="TermSidebar" Color="#CC1C1C1F" />
+            <SolidColorBrush x:Key="TermSurface2" Color="#242428" />
+            <SolidColorBrush x:Key="TermLine" Color="#2E2E33" />
+            <SolidColorBrush x:Key="TermText" Color="#F4F4F5" />
+            <SolidColorBrush x:Key="TermMuted" Color="#9A9AA2" />
+            <SolidColorBrush x:Key="TermWarn" Color="#FBBF24" />
+            <SolidColorBrush x:Key="TermErr" Color="#F87171" />
+            <SolidColorBrush x:Key="TermPingGood" Color="#4ADE80" />
+            <LinearGradientBrush x:Key="TermAccentBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#FFB547" />
+                <GradientStop Offset="1" Color="#FF7A45" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="TermConnectedBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#5EEAA0" />
+                <GradientStop Offset="1" Color="#10B981" />
+            </LinearGradientBrush>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="TermBg" Color="#0E0E10" />
+            <SolidColorBrush x:Key="TermSurface" Color="#1A1A1D" />
+            <SolidColorBrush x:Key="TermSidebar" Color="#CC1C1C1F" />
+            <SolidColorBrush x:Key="TermSurface2" Color="#242428" />
+            <SolidColorBrush x:Key="TermLine" Color="#2E2E33" />
+            <SolidColorBrush x:Key="TermText" Color="#F4F4F5" />
+            <SolidColorBrush x:Key="TermMuted" Color="#9A9AA2" />
+            <SolidColorBrush x:Key="TermWarn" Color="#FBBF24" />
+            <SolidColorBrush x:Key="TermErr" Color="#F87171" />
+            <SolidColorBrush x:Key="TermPingGood" Color="#4ADE80" />
+            <LinearGradientBrush x:Key="TermAccentBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#FFB547" />
+                <GradientStop Offset="1" Color="#FF7A45" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="TermConnectedBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#5EEAA0" />
+                <GradientStop Offset="1" Color="#10B981" />
+            </LinearGradientBrush>
+        </ResourceDictionary>
+
+        <!-- Light -->
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="TermBg" Color="#F5F5F7" />
+            <SolidColorBrush x:Key="TermSurface" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TermSidebar" Color="#B3F6F6F8" />
+            <SolidColorBrush x:Key="TermSurface2" Color="#EDEDF0" />
+            <SolidColorBrush x:Key="TermLine" Color="#E2E2E6" />
+            <SolidColorBrush x:Key="TermText" Color="#111114" />
+            <SolidColorBrush x:Key="TermMuted" Color="#6B6B73" />
+            <SolidColorBrush x:Key="TermWarn" Color="#B7791F" />
+            <SolidColorBrush x:Key="TermErr" Color="#DC2626" />
+            <SolidColorBrush x:Key="TermPingGood" Color="#059669" />
+            <LinearGradientBrush x:Key="TermAccentBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#FFB547" />
+                <GradientStop Offset="1" Color="#FF7A45" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="TermConnectedBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#34D399" />
+                <GradientStop Offset="1" Color="#059669" />
+            </LinearGradientBrush>
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

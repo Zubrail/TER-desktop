@@ -1,0 +1,2018 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.TermitusHomeView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
+    xmlns:svc="clr-namespace:ServiceLib.Services;assembly=ServiceLib"
+    x:DataType="vms:TermitusHomeViewModel"
+    mc:Ignorable="d">
+
+    <UserControl.Styles>
+        <!-- Big round Connect button: amber when off, mint when connected -->
+        <Style Selector="Button.term-connect">
+            <Setter Property="Width" Value="216" />
+            <Setter Property="Height" Value="216" />
+            <Setter Property="CornerRadius" Value="108" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.term-connect.connected">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <!-- 0.5: amber disc, mint disc fades in over it; the button itself is transparent -->
+        <Style Selector="Ellipse.term-disc-on">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.4" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Ellipse.term-disc-on.connected">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Button.term-connect">
+            <Setter Property="RenderTransform" Value="scale(1)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.term-connect:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.96)" />
+        </Style>
+
+        <!-- 0.5: soft Apple-like card: hairline + two-layer shadow -->
+        <Style Selector="Border.term-card">
+            <Setter Property="Background" Value="{DynamicResource TermSurface}" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TermLine}" />
+            <Setter Property="BorderThickness" Value="0.5" />
+            <Setter Property="BoxShadow" Value="0 1 2 0 #12000000, 0 8 24 0 #0D000000" />
+        </Style>
+        <!-- 0.5: glow under the connect button, amber when off, mint when on -->
+        <Style Selector="Border.term-glow">
+            <Setter Property="Width" Value="216" />
+            <Setter Property="Height" Value="216" />
+            <Setter Property="CornerRadius" Value="108" />
+            <Setter Property="BoxShadow" Value="0 16 44 0 #55FF7A45" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.35" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.term-glow.connected">
+            <Setter Property="BoxShadow" Value="0 16 52 0 #6610B981" />
+        </Style>
+        <Style Selector="Border.term-glow.busy">
+            <Setter Property="BoxShadow" Value="0 10 30 0 #33FF7A45" />
+        </Style>
+        <Style Selector="Path.term-ring">
+            <Setter Property="Width" Value="246" />
+            <Setter Property="Height" Value="246" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="StrokeThickness" Value="4" />
+            <Setter Property="StrokeLineCap" Value="Round" />
+            <Setter Property="Stroke" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="Data" Value="M123 3 A120 120 0 0 1 243 123" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="Path.term-ring.spin">
+            <Style.Animations>
+                <Animation Duration="0:0:1.1" IterationCount="Infinite">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RotateTransform.Angle" Value="0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RotateTransform.Angle" Value="360" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Button.term-chip-btn">
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Background" Value="{DynamicResource TermSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TermLine}" />
+            <Setter Property="BorderThickness" Value="0.5" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <!-- 0.6: selected problem category / informational banner / check marks -->
+        <Style Selector="Button.term-chip-btn.selected">
+            <Setter Property="BorderBrush" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+        <Style Selector="Border.term-banner.info">
+            <Setter Property="BorderBrush" Value="{DynamicResource TermAccentBrush}" />
+        </Style>
+        <Style Selector="TextBlock.term-mark">
+            <Setter Property="FontSize" Value="17" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Width" Value="24" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+        </Style>
+        <Style Selector="TextBlock.term-mark.ok">
+            <Setter Property="Foreground" Value="{DynamicResource TermPingGood}" />
+        </Style>
+        <Style Selector="TextBlock.term-mark.slow">
+            <Setter Property="Foreground" Value="{DynamicResource TermWarn}" />
+        </Style>
+        <Style Selector="TextBlock.term-mark.fail">
+            <Setter Property="Foreground" Value="{DynamicResource TermErr}" />
+        </Style>
+        <Style Selector="Button.term-chip-btn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource TermSurface2}" />
+        </Style>
+        <Style Selector="TextBlock.term-stat-value">
+            <Setter Property="FontSize" Value="19" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.term-stat-value.good">
+            <Setter Property="Foreground" Value="{DynamicResource TermPingGood}" />
+        </Style>
+        <Style Selector="TextBlock.term-stat-value.mid">
+            <Setter Property="Foreground" Value="{DynamicResource TermWarn}" />
+        </Style>
+        <Style Selector="TextBlock.term-stat-value.bad">
+            <Setter Property="Foreground" Value="{DynamicResource TermErr}" />
+        </Style>
+        <Style Selector="TextBlock.term-stat-label">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+
+        <Style Selector="TextBlock.term-status">
+            <Setter Property="FontSize" Value="30" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.term-status.warn">
+            <Setter Property="Foreground" Value="{DynamicResource TermErr}" />
+        </Style>
+        <Style Selector="TextBlock.term-sub">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Location picker rows -->
+        <Style Selector="Button.term-row">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="18,14" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Background" Value="{DynamicResource TermSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TermLine}" />
+            <Setter Property="BorderThickness" Value="0.5" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.term-row:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource TermSurface2}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TermLine}" />
+        </Style>
+        <Style Selector="Button.term-row.selected">
+            <Setter Property="BorderBrush" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+        <Style Selector="Button.term-row.selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource TermAccentBrush}" />
+        </Style>
+        <Style Selector="Button.term-row.down">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        <Style Selector="TextBlock.term-row-title">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+        </Style>
+        <Style Selector="TextBlock.term-row-caption">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+        </Style>
+        <Style Selector="TextBlock.term-ping">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+        </Style>
+        <Style Selector="TextBlock.term-ping.good">
+            <Setter Property="Foreground" Value="{DynamicResource TermPingGood}" />
+        </Style>
+        <Style Selector="TextBlock.term-ping.mid">
+            <Setter Property="Foreground" Value="{DynamicResource TermWarn}" />
+        </Style>
+        <Style Selector="TextBlock.term-ping.bad">
+            <Setter Property="Foreground" Value="{DynamicResource TermErr}" />
+        </Style>
+
+        <!-- Sidebar -->
+        <Style Selector="Button.term-nav">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="14,11" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.term-nav:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource TermSurface2}" />
+        </Style>
+        <Style Selector="Button.term-nav.active /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.term-nav.active">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Path.term-nav-icon">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="StrokeThickness" Value="1.7" />
+            <Setter Property="StrokeLineCap" Value="Round" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Stroke" Value="{Binding $parent[Button].Foreground}" />
+        </Style>
+
+        <!-- Settings rows -->
+        <Style Selector="TextBlock.term-h1">
+            <Setter Property="FontSize" Value="26" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="Margin" Value="0,0,0,16" />
+        </Style>
+        <Style Selector="TextBlock.term-section">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+            <Setter Property="Margin" Value="4,14,0,8" />
+        </Style>
+        <Style Selector="TextBlock.term-hint">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+        </Style>
+        <Style Selector="TextBlock.term-chip">
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+        </Style>
+        <Style Selector="TextBlock.term-chip.warn">
+            <Setter Property="Foreground" Value="{DynamicResource TermWarn}" />
+        </Style>
+        <Style Selector="TextBlock.term-chip.bad">
+            <Setter Property="Foreground" Value="{DynamicResource TermErr}" />
+        </Style>
+        <!-- Account status line: green / amber / red -->
+        <Style Selector="TextBlock.term-acc-status">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.term-acc-status.ok">
+            <Setter Property="Foreground" Value="{DynamicResource TermPingGood}" />
+        </Style>
+        <Style Selector="TextBlock.term-acc-status.warn">
+            <Setter Property="Foreground" Value="{DynamicResource TermWarn}" />
+        </Style>
+        <Style Selector="TextBlock.term-acc-status.bad">
+            <Setter Property="Foreground" Value="{DynamicResource TermErr}" />
+        </Style>
+        <Style Selector="Border.term-banner">
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TermWarn}" />
+            <Setter Property="Background" Value="{DynamicResource TermSurface}" />
+        </Style>
+        <Style Selector="Border.term-banner.bad">
+            <Setter Property="BorderBrush" Value="{DynamicResource TermErr}" />
+        </Style>
+        <Style Selector="Button.term-primary">
+            <Setter Property="Background" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="CornerRadius" Value="20" />
+            <Setter Property="Padding" Value="18,9" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.term-secondary">
+            <Setter Property="Background" Value="{DynamicResource TermSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TermLine}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="CornerRadius" Value="20" />
+            <Setter Property="Padding" Value="18,9" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <!-- 0.4: Apple-like soft card (shadow instead of a hard border) -->
+        <Style Selector="Border.term-soft">
+            <Setter Property="Background" Value="{DynamicResource TermSurface}" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="BoxShadow" Value="0 1 2 0 #14000000, 0 8 24 0 #10000000" />
+        </Style>
+        <Style Selector="Button.term-text">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.term-text:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource TermSurface2}" />
+        </Style>
+        <Style Selector="Button.term-big">
+            <Setter Property="Height" Value="50" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <!-- Spinner: only animates while it has the .spin class (no idle clock ticks) -->
+        <Style Selector="Path.term-spinner">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="StrokeThickness" Value="3" />
+            <Setter Property="StrokeLineCap" Value="Round" />
+            <Setter Property="Stroke" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="Data" Value="M17 2 A15 15 0 1 1 2 17" />
+        </Style>
+        <Style Selector="Path.term-spinner.spin">
+            <Style.Animations>
+                <Animation Duration="0:0:0.9" IterationCount="Infinite">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RotateTransform.Angle" Value="0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RotateTransform.Angle" Value="360" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <!-- Chat bubbles: mine = accent on the right, support = soft grey on the left -->
+        <Style Selector="StackPanel.term-msg">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Margin" Value="0,0,48,10" />
+            <Setter Property="Spacing" Value="3" />
+        </Style>
+        <Style Selector="StackPanel.term-msg.mine">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="48,0,0,10" />
+        </Style>
+        <Style Selector="Border.term-bubble">
+            <Setter Property="Background" Value="{DynamicResource TermSurface2}" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="StackPanel.term-msg.mine Border.term-bubble">
+            <Setter Property="Background" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
+        <Style Selector="SelectableTextBlock.term-bubble-text">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="LineHeight" Value="20" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+        </Style>
+        <Style Selector="StackPanel.term-msg.mine SelectableTextBlock.term-bubble-text">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="TextBlock.term-msg-meta">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+            <Setter Property="Margin" Value="6,0" />
+        </Style>
+        <Style Selector="StackPanel.term-msg.mine TextBlock.term-msg-meta">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
+        <!-- Subtle hover fades (120 ms) for sidebar and list rows -->
+        <Style Selector="Button.term-nav /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.term-row /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <!-- 0.4.1: destructive action (log out) and the calm "no connection" note -->
+        <Style Selector="Button.term-danger">
+            <Setter Property="Background" Value="{DynamicResource TermErr}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="CornerRadius" Value="20" />
+            <Setter Property="Padding" Value="18,9" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.term-danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource TermErr}" />
+            <Setter Property="Opacity" Value="0.9" />
+        </Style>
+        <!-- Our filled buttons set Background directly, so the theme's disabled look never shows -->
+        <Style Selector="Button.term-primary:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+        <Style Selector="Button.term-danger:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+        <Style Selector="Button.term-row.term-danger-row">
+            <Setter Property="Foreground" Value="{DynamicResource TermErr}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Path.term-offline-icon">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="StrokeThickness" Value="1.8" />
+            <Setter Property="StrokeLineCap" Value="Round" />
+            <Setter Property="Stroke" Value="{DynamicResource TermWarn}" />
+            <Setter Property="Data" Value="M2 8 C7 3 13 3 18 8 M5 11.2 C8.3 8.4 11.7 8.4 15 11.2 M8 14.4 C9.2 13.4 10.8 13.4 12 14.4 M10 17.4 L10 17.6 M3 2 L17 18" />
+        </Style>
+        <Style Selector="TextBlock.term-badge">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="LetterSpacing" Value="0.4" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Expander.term-kb">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="CornerRadius" Value="16" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- TER simple UI: sidebar (Главная / Серверы / Настройки / Поддержка) + one page -->
+    <Grid Background="Transparent" ColumnDefinitions="248,*">
+
+        <!-- ===== Sidebar ===== -->
+        <Border
+            x:Name="sidebar"
+            Grid.Column="0"
+            Background="{DynamicResource TermSidebar}"
+            BorderBrush="{DynamicResource TermLine}"
+            BorderThickness="0,0,0.5,0">
+            <DockPanel Margin="16,20,16,16">
+                <!-- Brand: the real TER icon + name -->
+                <StackPanel Margin="6,6,0,28" DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12">
+                    <Image Width="40" Height="40" Source="avares://v2rayN/Assets/ter-logo.png" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="TER" />
+                        <TextBlock FontSize="10" FontWeight="SemiBold" LetterSpacing="1.2" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.PrivateNetwork}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Account card -->
+                <Button
+                    DockPanel.Dock="Bottom"
+                    Classes="term-row"
+                    Classes.selected="{Binding ShowAccount}"
+                    Margin="0"
+                    Padding="12,10"
+                    Command="{Binding AccountCmd}"
+                    ToolTip.Tip="{Binding Loc.TipSubChip}">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Border Width="34" Height="34" Background="{DynamicResource TermAccentBrush}" CornerRadius="17">
+                            <Path Width="14" Height="14" Data="M8 8 A4 4 0 1 0 8 0 A4 4 0 1 0 8 8 M1 16 C2 11 14 11 15 16" Stretch="Uniform" Stroke="White" StrokeThickness="1.6" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.Account}" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Panel VerticalAlignment="Center">
+                                    <Ellipse Width="7" Height="7" Fill="{DynamicResource TermPingGood}" IsVisible="{Binding AccountOk}" />
+                                    <Ellipse Width="7" Height="7" Fill="{DynamicResource TermWarn}" IsVisible="{Binding SubChipWarn}" />
+                                    <Ellipse Width="7" Height="7" Fill="{DynamicResource TermErr}" IsVisible="{Binding SubChipExpired}" />
+                                </Panel>
+                                <TextBlock FontSize="12" Classes.warn="{Binding SubChipWarn}" Classes.bad="{Binding SubChipExpired}" Classes="term-chip" Text="{Binding SubChipText}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+
+                <!-- Advanced (full upstream UI) -->
+                <Button
+                    DockPanel.Dock="Bottom"
+                    Margin="0,0,0,12"
+                    Classes="term-nav"
+                    Command="{Binding AdvancedCmd}"
+                    Foreground="{DynamicResource TermMuted}"
+                    ToolTip.Tip="{Binding Loc.NavAdvancedHint}">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Path Classes="term-nav-icon" Data="M2 5 L18 5 M2 10 L18 10 M2 15 L18 15 M6 3 L6 7 M13 8 L13 12 M8 13 L8 17" />
+                        <TextBlock VerticalAlignment="Center" FontSize="14" Text="{Binding Loc.NavAdvanced}" />
+                    </StackPanel>
+                </Button>
+
+                <StackPanel>
+                    <Button
+                        Classes="term-nav"
+                        Classes.active="{Binding ShowHome}"
+                        Command="{Binding NavCmd}"
+                        CommandParameter="home">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Path Classes="term-nav-icon" Data="M2 9 L10 2 L18 9 M4 7.5 L4 18 L16 18 L16 7.5" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Loc.NavHome}" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        Classes="term-nav"
+                        Classes.active="{Binding ShowPicker}"
+                        Command="{Binding NavCmd}"
+                        CommandParameter="servers">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Path Classes="term-nav-icon" Data="M10 1 A9 9 0 1 0 10 19 A9 9 0 1 0 10 1 M1 10 L19 10 M10 1 C5 6 5 14 10 19 M10 1 C15 6 15 14 10 19" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Loc.NavServers}" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        Classes="term-nav"
+                        Classes.active="{Binding ShowSettings}"
+                        Command="{Binding NavCmd}"
+                        CommandParameter="settings">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Path Classes="term-nav-icon" Data="M10 6.5 A3.5 3.5 0 1 0 10 13.5 A3.5 3.5 0 1 0 10 6.5 M10 1 L10 3.5 M10 16.5 L10 19 M1 10 L3.5 10 M16.5 10 L19 10 M3.6 3.6 L5.4 5.4 M14.6 14.6 L16.4 16.4 M3.6 16.4 L5.4 14.6 M14.6 5.4 L16.4 3.6" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Loc.NavSettings}" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        Classes="term-nav"
+                        Classes.active="{Binding ShowSupport}"
+                        Command="{Binding NavCmd}"
+                        CommandParameter="support">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Path Classes="term-nav-icon" Data="M10 1 A9 9 0 1 0 10 19 A9 9 0 1 0 10 1 M7.2 7.5 C7.2 4.5 12.8 4.5 12.8 7.5 C12.8 9.8 10 9.8 10 12.3 M10 15 L10 15.2" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Loc.NavSupport}" />
+                            <Ellipse
+                                Width="8"
+                                Height="8"
+                                VerticalAlignment="Center"
+                                Fill="{DynamicResource TermAccentBrush}"
+                                IsVisible="{Binding HasSupportUnread}"
+                                ToolTip.Tip="{Binding Loc.TipSupportUnread}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ===== Pages ===== -->
+        <Grid Grid.Column="1" Background="{DynamicResource TermBg}">
+
+            <!-- Connect screen + first run (one page container, animated in by the code-behind) -->
+            <Panel x:Name="pageHome" IsVisible="{Binding ShowHome}">
+            <!-- Subscription ends in <= 3 days / has ended -->
+            <Border
+                MaxWidth="560"
+                Margin="24,20,24,0"
+                Padding="18,12"
+                VerticalAlignment="Top"
+                Classes="term-banner"
+                Classes.bad="{Binding SubChipExpired}"
+                IsVisible="{Binding ShowExpiryBanner}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Classes="term-row-title" Text="{Binding ExpiryBannerText}" TextWrapping="Wrap" />
+                        <TextBlock Classes="term-hint" Text="{Binding Loc.BannerHint}" />
+                    </StackPanel>
+                    <Button
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Classes="term-primary"
+                        Command="{Binding RenewCmd}"
+                        Content="{Binding Loc.Renew}"
+                        ToolTip.Tip="{Binding Loc.TipRenew}" />
+                </Grid>
+            </Border>
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                IsVisible="{Binding !ShowFirstRun}"
+                Spacing="14">
+                <Panel Width="250" Height="250" HorizontalAlignment="Center">
+                    <Border
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Classes="term-glow"
+                        Classes.connected="{Binding IsConnected}"
+                        Classes.busy="{Binding IsConnecting}">
+                        <Panel>
+                        <Ellipse Fill="{DynamicResource TermAccentBrush}" />
+                        <Ellipse Classes="term-disc-on" Classes.connected="{Binding IsConnected}" Fill="{DynamicResource TermConnectedBrush}" />
+                        <Button
+                            Classes="term-connect"
+                            Classes.connected="{Binding IsConnected}"
+                            Command="{Binding ConnectToggleCmd}"
+                            IsEnabled="{Binding !IsBusy}"
+                            ToolTip.Tip="{Binding Loc.TipConnect}">
+                            <Path
+                                Width="60"
+                                Height="60"
+                                Data="M12 3 L12 12 M6.5 6.5 A8 8 0 1 0 17.5 6.5"
+                                Stretch="Uniform"
+                                Stroke="White"
+                                StrokeLineCap="Round"
+                                StrokeThickness="2" />
+                        </Button>
+                        </Panel>
+                    </Border>
+                    <Path x:Name="connectRing" Classes="term-ring" Classes.spin="{Binding IsConnecting}" IsVisible="{Binding IsConnecting}" />
+                </Panel>
+
+                <TextBlock
+                    Classes="term-status"
+                    Classes.warn="{Binding StatusWarn}"
+                    Text="{Binding StatusText}" />
+                <TextBlock Classes="term-sub" Text="{Binding ConnectCaption}" />
+                <TextBlock
+                    x:Name="txtSubStatus"
+                    MaxWidth="420"
+                    Classes="term-sub"
+                    Text="{Binding SubStatusText}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+
+                <!-- Single location row: opens the picker -->
+                <Button
+                    Width="420"
+                    Margin="0,8,0,0"
+                    Classes="term-row"
+                    Command="{Binding OpenPickerCmd}"
+                    IsEnabled="{Binding !IsBusy}"
+                    ToolTip.Tip="{Binding Loc.TipLocation}">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <!-- Country badge ("NL") instead of the flag emoji: see TermitusLocations.DisplayParts -->
+                        <Panel Grid.Column="0" Width="30" Height="30" VerticalAlignment="Center">
+                            <Ellipse Fill="{DynamicResource TermSurface2}" IsVisible="{Binding HasLocationBadge}" />
+                            <TextBlock Classes="term-badge" IsVisible="{Binding HasLocationBadge}" Text="{Binding LocationBadge}" />
+                            <Border Background="{DynamicResource TermAccentBrush}" CornerRadius="15" IsVisible="{Binding !HasLocationBadge}">
+                                <Path Width="12" Height="16" Data="M7 0 L0 9 L5 9 L4 16 L11 7 L6 7 Z" Fill="White" Stretch="Uniform" />
+                            </Border>
+                        </Panel>
+                        <StackPanel
+                            Grid.Column="1"
+                            Margin="12,0"
+                            VerticalAlignment="Center">
+                            <TextBlock
+                                FontSize="16"
+                                FontWeight="Bold"
+                                Foreground="{DynamicResource TermText}"
+                                Text="{Binding LocationName}" />
+                            <TextBlock
+                                FontSize="12.5"
+                                Foreground="{DynamicResource TermMuted}"
+                                Text="{Binding LocationDetail}" />
+                        </StackPanel>
+                        <Path
+                            Grid.Column="2"
+                            Width="9"
+                            Height="16"
+                            VerticalAlignment="Center"
+                            Data="M1 1 L8 8 L1 15"
+                            Stretch="Uniform"
+                            Stroke="{DynamicResource TermMuted}"
+                            StrokeLineCap="Round"
+                            StrokeThickness="2" />
+                    </Grid>
+                </Button>
+
+                <!-- 0.5: live numbers (only while connected) -->
+                <Border
+                    Width="420"
+                    Padding="18,14,18,10"
+                    Classes="term-card"
+                    IsVisible="{Binding IsConnected}">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="*,*,*">
+                            <StackPanel Grid.Column="0" ToolTip.Tip="{Binding Loc.TipStatPing}">
+                                <TextBlock
+                                    Classes="term-stat-value"
+                                    Classes.bad="{Binding LivePingBad}"
+                                    Classes.good="{Binding LivePingGood}"
+                                    Classes.mid="{Binding LivePingMid}"
+                                    Text="{Binding LivePingText}" />
+                                <TextBlock Classes="term-stat-label" Text="{Binding Loc.StatPing}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" ToolTip.Tip="{Binding Loc.TipStatDown}">
+                                <TextBlock Classes="term-stat-value" Text="{Binding LiveDownText}" />
+                                <TextBlock Classes="term-stat-label" Text="{Binding Loc.StatDown}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" ToolTip.Tip="{Binding Loc.TipStatUp}">
+                                <TextBlock Classes="term-stat-value" Text="{Binding LiveUpText}" />
+                                <TextBlock Classes="term-stat-label" Text="{Binding Loc.StatUp}" />
+                            </StackPanel>
+                        </Grid>
+                        <Panel Height="44" ToolTip.Tip="{Binding Loc.TipGraph}">
+                            <Path Data="{Binding GraphDownPath}" Fill="#33FF7A45" Stroke="{DynamicResource TermAccentBrush}" StrokeThickness="1.5" StrokeJoin="Round" Stretch="Fill" />
+                            <Path Data="{Binding GraphUpPath}" Stroke="{DynamicResource TermMuted}" StrokeThickness="1.2" StrokeJoin="Round" Stretch="Fill" Opacity="0.8" />
+                        </Panel>
+                    </StackPanel>
+                </Border>
+
+                <!-- 0.5: route and protocol, one tap away -->
+                <StackPanel HorizontalAlignment="Center" IsVisible="{Binding HasSubscription}" Orientation="Horizontal" Spacing="10">
+                    <Button Classes="term-chip-btn" ToolTip.Tip="{Binding Loc.TipRouteChip}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock FontSize="13" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.RouteChipLabel}" />
+                            <TextBlock FontSize="13" FontWeight="SemiBold" Text="{Binding RouteChipText}" />
+                            <Path Width="8" Height="5" VerticalAlignment="Center" Data="M1 1 L5 4.5 L9 1" Stretch="Uniform" Stroke="{DynamicResource TermMuted}" StrokeLineCap="Round" StrokeThickness="1.5" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <MenuFlyout Placement="TopEdgeAlignedLeft">
+                                <MenuItem Command="{Binding SetRoutingCmd}" CommandParameter="except_ru" IsChecked="{Binding RouteExceptRu}" ToggleType="Radio">
+                                    <MenuItem.Header>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Loc.RouteExceptRuTitle}" />
+                                            <TextBlock FontSize="12" Opacity="0.65" Text="{Binding Loc.RouteExceptRuHint}" TextWrapping="Wrap" MaxWidth="320" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding SetRoutingCmd}" CommandParameter="blocked" IsChecked="{Binding RouteBlockedOnly}" ToggleType="Radio">
+                                    <MenuItem.Header>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Loc.RouteBlockedTitle}" />
+                                            <TextBlock FontSize="12" Opacity="0.65" Text="{Binding Loc.RouteBlockedHint}" TextWrapping="Wrap" MaxWidth="320" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding SetRoutingCmd}" CommandParameter="all" IsChecked="{Binding RouteAll}" ToggleType="Radio">
+                                    <MenuItem.Header>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Loc.RouteAllTitle}" />
+                                            <TextBlock FontSize="12" Opacity="0.65" Text="{Binding Loc.RouteAllHint}" TextWrapping="Wrap" MaxWidth="320" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button Classes="term-chip-btn" ToolTip.Tip="{Binding Loc.TipProtocolChip}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock FontSize="13" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.ProtocolChipLabel}" />
+                            <TextBlock FontSize="13" FontWeight="SemiBold" Text="{Binding ProtocolChipText}" />
+                            <Path Width="8" Height="5" VerticalAlignment="Center" Data="M1 1 L5 4.5 L9 1" Stretch="Uniform" Stroke="{DynamicResource TermMuted}" StrokeLineCap="Round" StrokeThickness="1.5" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <MenuFlyout Placement="TopEdgeAlignedRight">
+                                <MenuItem Command="{Binding SetProtocolCmd}" CommandParameter="auto" IsChecked="{Binding ProtocolAuto}" ToggleType="Radio">
+                                    <MenuItem.Header>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Loc.ProtocolAutoTitle}" />
+                                            <TextBlock FontSize="12" Opacity="0.65" Text="{Binding Loc.ProtocolAutoHint}" TextWrapping="Wrap" MaxWidth="320" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding SetProtocolCmd}" CommandParameter="tcp" IsChecked="{Binding ProtocolTcp}" ToggleType="Radio">
+                                    <MenuItem.Header>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Loc.ProtocolTcpTitle}" />
+                                            <TextBlock FontSize="12" Opacity="0.65" Text="{Binding Loc.ProtocolTcpHint}" TextWrapping="Wrap" MaxWidth="320" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding SetProtocolCmd}" CommandParameter="udp" IsChecked="{Binding ProtocolUdp}" ToggleType="Radio">
+                                    <MenuItem.Header>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Loc.ProtocolUdpTitle}" />
+                                            <TextBlock FontSize="12" Opacity="0.65" Text="{Binding Loc.ProtocolUdpHint}" TextWrapping="Wrap" MaxWidth="320" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <Separator />
+                                <MenuItem IsEnabled="False">
+                                    <MenuItem.Header>
+                                        <TextBlock FontSize="12" Opacity="0.65" Text="{Binding Loc.ProtocolNote}" TextWrapping="Wrap" MaxWidth="320" />
+                                    </MenuItem.Header>
+                                </MenuItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </StackPanel>
+
+                <!-- 0.5: another VPN owns the default route -->
+                <Border
+                    Width="420"
+                    Padding="18,14"
+                    Classes="term-banner"
+                    IsVisible="{Binding ShowOtherVpn}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="term-row-title" Text="{Binding Loc.OtherVpnTitle}" TextWrapping="Wrap" />
+                        <TextBlock Classes="term-hint" Text="{Binding OtherVpnText}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="term-primary" Command="{Binding OtherVpnRetryCmd}" Content="{Binding Loc.OtherVpnRetry}" ToolTip.Tip="{Binding Loc.TipOtherVpnRetry}" />
+                            <Button Classes="term-secondary" Command="{Binding OtherVpnForceCmd}" Content="{Binding Loc.OtherVpnForce}" ToolTip.Tip="{Binding Loc.TipOtherVpnForce}" />
+                        </StackPanel>
+                        <Button HorizontalAlignment="Left" Classes="term-text" Command="{Binding ReportConnectCmd}" Content="{Binding Loc.ErrReport}" Foreground="{DynamicResource TermMuted}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 0.6: friendly connection-error card: what failed, what still works, what to do -->
+                <Border
+                    Width="440"
+                    Padding="18,14"
+                    Classes="term-banner bad"
+                    IsVisible="{Binding ShowConnError}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="term-row-title" Text="{Binding ConnErrTitle}" TextWrapping="Wrap" />
+                        <StackPanel Spacing="2">
+                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TermErr}" Text="{Binding Loc.ErrWhatFailed}" />
+                            <TextBlock Classes="term-hint" Text="{Binding ConnErrFailed}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Spacing="2">
+                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TermPingGood}" Text="{Binding Loc.ErrWhatWorks}" />
+                            <TextBlock Classes="term-hint" Text="{Binding ConnErrWorks}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <WrapPanel>
+                            <Button Margin="0,0,10,6" Classes="term-primary" Command="{Binding ConnErrTryOtherCmd}" Content="{Binding Loc.ErrTryOther}" />
+                            <Button Margin="0,0,10,6" Classes="term-secondary" Command="{Binding ReportConnectCmd}" Content="{Binding Loc.ErrReport}" />
+                            <Button Margin="0,0,0,6" Classes="term-text" Command="{Binding ConnErrCheckCmd}" Content="{Binding Loc.ErrCheck}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Classes="term-sub" Text="{Binding Loc.RuDirectHint}" />
+
+            </StackPanel>
+
+            <!-- 0.6: a newer, signed version exists -->
+            <Border
+                MaxWidth="560"
+                Margin="24,0,24,20"
+                Padding="18,12"
+                VerticalAlignment="Bottom"
+                Classes="term-banner info"
+                IsVisible="{Binding ShowUpdateBanner}">
+                <Grid ColumnDefinitions="*,Auto,Auto">
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Classes="term-row-title" Text="{Binding UpdateBannerText}" TextWrapping="Wrap" />
+                        <Button Margin="-10,0,0,-4" HorizontalAlignment="Left" Classes="term-text" Command="{Binding UpdateOpenCmd}" Content="{Binding Loc.UpdateWhatsNew}" Foreground="{DynamicResource TermMuted}" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Margin="0,0,8,0" VerticalAlignment="Center" Classes="term-text" Command="{Binding UpdateLaterCmd}" Content="{Binding Loc.UpdateLater}" />
+                    <Button Grid.Column="2" VerticalAlignment="Center" Classes="term-primary" Command="{Binding UpdateNowCmd}" Content="{Binding Loc.UpdateNow}" />
+                </Grid>
+            </Border>
+
+            <!-- First run (0.4): «Войти через Telegram» / waiting for the bot / paste a link -->
+            <Panel
+                x:Name="firstRun"
+                MaxWidth="400"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                IsVisible="{Binding ShowFirstRun}">
+
+                <!-- Choice -->
+                <StackPanel x:Name="frChoice" IsVisible="{Binding ShowLoginChoice}" Spacing="0">
+                    <Border Width="64" Height="64" HorizontalAlignment="Center" Background="{DynamicResource TermAccentBrush}" CornerRadius="18" BoxShadow="0 6 18 0 #33FF7A45">
+                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="32" FontWeight="Black" Foreground="White" Text="T" />
+                    </Border>
+                    <TextBlock Margin="0,22,0,0" HorizontalAlignment="Center" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.Hello}" />
+                    <TextBlock Margin="0,6,0,0" HorizontalAlignment="Center" FontSize="15" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.FirstRunLoginTitle}" TextAlignment="Center" TextWrapping="Wrap" />
+                    <Button
+                        Margin="0,30,0,0"
+                        Classes="term-primary term-big"
+                        Command="{Binding LoginTelegramCmd}"
+                        IsEnabled="{Binding !IsLoginStarting}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Path Width="18" Height="16" VerticalAlignment="Center" Data="M1 7.5 L19 1 L15.5 18 L10 13 L7 16.5 L7 11.5 L15 4 L5.5 10.5 Z" Fill="White" Stretch="Uniform" />
+                            <Panel VerticalAlignment="Center">
+                                <TextBlock Foreground="White" IsVisible="{Binding !IsLoginStarting}" Text="{Binding Loc.LoginTelegram}" />
+                                <TextBlock Foreground="White" IsVisible="{Binding IsLoginStarting}" Text="{Binding Loc.LoginStarting}" />
+                            </Panel>
+                        </StackPanel>
+                    </Button>
+                    <TextBlock Margin="0,12,0,0" HorizontalAlignment="Center" Classes="term-hint" Text="{Binding Loc.FirstRunLoginHint}" TextAlignment="Center" />
+                    <Button
+                        Margin="0,18,0,0"
+                        HorizontalAlignment="Center"
+                        Classes="term-text"
+                        Command="{Binding ShowLinkCmd}"
+                        Content="{Binding Loc.HaveLink}" />
+                    <TextBlock Margin="0,14,0,0" HorizontalAlignment="Center" FontSize="13" Foreground="{DynamicResource TermMuted}" Text="{Binding FirstRunStatus}" TextAlignment="Center" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!-- Waiting for the confirmation in Telegram / importing -->
+                <StackPanel x:Name="frWaiting" IsVisible="{Binding ShowLoginWaiting}" Spacing="0">
+                    <Path HorizontalAlignment="Center" Classes="term-spinner" Classes.spin="{Binding ShowLoginWaiting}">
+                        <Path.RenderTransform>
+                            <RotateTransform />
+                        </Path.RenderTransform>
+                    </Path>
+                    <TextBlock Margin="0,22,0,0" HorizontalAlignment="Center" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding LoginWaitingTitle}" TextAlignment="Center" TextWrapping="Wrap" />
+                    <StackPanel IsVisible="{Binding !IsLoginImporting}">
+                        <TextBlock Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="14" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.LoginWaitingHint}" TextAlignment="Center" TextWrapping="Wrap" />
+                        <TextBlock x:Name="txtCountdown" Margin="0,14,0,0" HorizontalAlignment="Center" FontSize="13" Foreground="{DynamicResource TermMuted}" Text="{Binding LoginCountdown}" />
+                        <Button
+                            Margin="0,24,0,0"
+                            Classes="term-secondary term-big"
+                            Command="{Binding LoginOpenAgainCmd}"
+                            Content="{Binding Loc.LoginOpenAgain}" />
+                        <Button
+                            Margin="0,10,0,0"
+                            HorizontalAlignment="Center"
+                            Classes="term-text"
+                            Command="{Binding CancelLoginCmd}"
+                            Content="{Binding Loc.Cancel}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Paste a subscription link (the 0.3 first run) -->
+                <StackPanel x:Name="frLink" IsVisible="{Binding ShowLinkPaste}" Spacing="14">
+                    <TextBlock FontSize="28" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.Hello}" />
+                    <TextBlock FontSize="16" Foreground="{DynamicResource TermText}" Text="{Binding Loc.LinkTitle}" />
+                    <TextBlock FontSize="13" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.FirstRunHint}" />
+                    <TextBox PlaceholderText="{Binding Loc.SubscriptionPlaceholder}" Text="{Binding SubscriptionInput, Mode=TwoWay}" />
+                    <Button
+                        Classes="term-primary term-big"
+                        Command="{Binding ImportSubscriptionCmd}"
+                        Content="{Binding Loc.ImportButton}"
+                        IsEnabled="{Binding !IsBusy}" />
+                    <TextBlock FontSize="13" Foreground="{DynamicResource TermMuted}" Text="{Binding FirstRunStatus}" TextWrapping="Wrap" />
+                    <Button
+                        HorizontalAlignment="Center"
+                        Classes="term-text"
+                        Command="{Binding ShowLoginCmd}"
+                        Content="{Binding Loc.LoginBackToTelegram}"
+                        IsVisible="{Binding CanUseTelegramLogin}" />
+                </StackPanel>
+            </Panel>
+            </Panel>
+
+            <!-- Location picker -->
+            <Grid
+                x:Name="pagePicker"
+                Width="560"
+                Margin="0,8,0,16"
+                HorizontalAlignment="Center"
+                IsVisible="{Binding ShowPicker}"
+                RowDefinitions="Auto,Auto,*">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                    <Button
+                        Grid.Column="0"
+                        Width="36"
+                        Height="36"
+                        Padding="0"
+                        Background="{DynamicResource TermSurface}"
+                        BorderBrush="{DynamicResource TermLine}"
+                        BorderThickness="1"
+                        Command="{Binding ClosePickerCmd}"
+                        CornerRadius="18"
+                        ToolTip.Tip="{Binding Loc.Back}">
+                        <Path
+                            Width="8"
+                            Height="14"
+                            Data="M8 1 L1 8 L8 15"
+                            Stretch="Uniform"
+                            Stroke="{DynamicResource TermText}"
+                            StrokeLineCap="Round"
+                            StrokeThickness="2" />
+                    </Button>
+                    <TextBlock
+                        Grid.Column="1"
+                        Margin="14,0"
+                        VerticalAlignment="Center"
+                        FontSize="22"
+                        FontWeight="Bold"
+                        Foreground="{DynamicResource TermText}"
+                        Text="{Binding Loc.PickerTitle}" />
+                    <Button
+                        Grid.Column="2"
+                        Padding="14,8"
+                        Background="{DynamicResource TermSurface}"
+                        BorderBrush="{DynamicResource TermLine}"
+                        BorderThickness="1"
+                        Command="{Binding RetestCmd}"
+                        CornerRadius="18"
+                        IsEnabled="{Binding !IsTesting}"
+                        ToolTip.Tip="{Binding Loc.TipRetest}">
+                        <Panel>
+                            <TextBlock
+                                FontSize="13"
+                                Foreground="{DynamicResource TermText}"
+                                IsVisible="{Binding !IsTesting}"
+                                Text="{Binding Loc.Retest}" />
+                            <TextBlock
+                                FontSize="13"
+                                Foreground="{DynamicResource TermMuted}"
+                                IsVisible="{Binding IsTesting}"
+                                Text="{Binding Loc.Testing}" />
+                        </Panel>
+                    </Button>
+                </Grid>
+
+                <TextBlock
+                    Grid.Row="1"
+                    Margin="0,12,0,14"
+                    FontSize="13"
+                    Foreground="{DynamicResource TermMuted}"
+                    Text="{Binding Loc.PickerHint}"
+                    TextWrapping="Wrap" />
+
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <!-- Auto -->
+                        <Button
+                            Classes="term-row"
+                            Classes.selected="{Binding IsAutoChoice}"
+                            Command="{Binding SelectLocationCmd}"
+                            CommandParameter="">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Border
+                                    Grid.Column="0"
+                                    Width="30"
+                                    Height="30"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource TermAccentBrush}"
+                                    CornerRadius="15">
+                                    <Path
+                                        Width="12"
+                                        Height="16"
+                                        Data="M7 0 L0 9 L5 9 L4 16 L11 7 L6 7 Z"
+                                        Fill="White"
+                                        Stretch="Uniform" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.AutoTitle}" />
+                                    <TextBlock Classes="term-row-caption" Text="{Binding AutoCaption}" />
+                                </StackPanel>
+                                <Path
+                                    Grid.Column="2"
+                                    Width="14"
+                                    Height="11"
+                                    VerticalAlignment="Center"
+                                    Data="M1 6 L5 10 L13 1"
+                                    IsVisible="{Binding IsAutoChoice}"
+                                    Stretch="Uniform"
+                                    Stroke="{DynamicResource TermPingGood}"
+                                    StrokeLineCap="Round"
+                                    StrokeThickness="2" />
+                            </Grid>
+                        </Button>
+
+                        <ItemsControl ItemsSource="{Binding Locations}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vms:TermitusLocationRow">
+                                    <Button
+                                        Classes="term-row"
+                                        Classes.down="{Binding IsDown}"
+                                        Classes.selected="{Binding IsSelected}"
+                                        Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).SelectLocationCmd}"
+                                        CommandParameter="{Binding Key}">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                            <Panel Grid.Column="0" Width="30" Height="30" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                <Ellipse Fill="{DynamicResource TermSurface2}" />
+                                                <TextBlock Classes="term-badge" Text="{Binding Badge}" />
+                                            </Panel>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Classes="term-row-title" Text="{Binding Title}" />
+                                                <TextBlock
+                                                    Classes="term-row-caption"
+                                                    IsVisible="{Binding HasCaption}"
+                                                    Text="{Binding Caption}" />
+                                            </StackPanel>
+                                            <TextBlock
+                                                Grid.Column="2"
+                                                Margin="12,0,0,0"
+                                                Classes="term-ping"
+                                                Classes.bad="{Binding IsBad}"
+                                                Classes.good="{Binding IsGood}"
+                                                Classes.mid="{Binding IsMid}"
+                                                Text="{Binding PingText}" />
+                                            <Path
+                                                Grid.Column="3"
+                                                Width="14"
+                                                Height="11"
+                                                Margin="12,0,0,0"
+                                                VerticalAlignment="Center"
+                                                Data="M1 6 L5 10 L13 1"
+                                                IsVisible="{Binding IsSelected}"
+                                                Stretch="Uniform"
+                                                Stroke="{DynamicResource TermPingGood}"
+                                                StrokeLineCap="Round"
+                                                StrokeThickness="2" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- 0.6: Проверка подключения -->
+            <ScrollViewer x:Name="pageCheck" IsVisible="{Binding ShowCheck}" VerticalScrollBarVisibility="Auto">
+                <StackPanel Width="560" Margin="0,28,0,24" HorizontalAlignment="Center">
+                    <TextBlock Classes="term-h1" Text="{Binding Loc.CheckTitle}" />
+                    <TextBlock Margin="4,0,0,14" Classes="term-hint" Text="{Binding Loc.CheckSubtitle}" TextWrapping="Wrap" />
+                    <StackPanel Margin="0,0,0,14" Orientation="Horizontal" Spacing="12">
+                        <Button Classes="term-primary" Command="{Binding CheckRunCmd}" IsEnabled="{Binding !CheckRunning}">
+                            <Panel>
+                                <TextBlock Foreground="White" IsVisible="{Binding !CheckRunning}" Text="{Binding Loc.CheckRun}" />
+                                <TextBlock Foreground="White" IsVisible="{Binding CheckRunning}" Text="{Binding Loc.CheckRunningText}" />
+                            </Panel>
+                        </Button>
+                        <TextBlock VerticalAlignment="Center" Classes="term-hint" IsVisible="{Binding CheckHasResults}" Text="{Binding CheckStamp}" />
+                    </StackPanel>
+                    <TextBlock Margin="4,0,0,10" Classes="term-hint" IsVisible="{Binding CheckNoServers}" Text="{Binding Loc.CheckNoServersText}" TextWrapping="Wrap" />
+
+                    <ItemsControl ItemsSource="{Binding CheckAdvice}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vms:TermitusAdviceRow">
+                                <Border Margin="0,0,0,10" Padding="16,12" Classes="term-banner info">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Text}" TextWrapping="Wrap" />
+                                        <Button
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Classes="term-secondary"
+                                            Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).CheckAdviceCmd}"
+                                            CommandParameter="{Binding ActionId}"
+                                            Content="{Binding ButtonText}"
+                                            IsVisible="{Binding HasButton}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Classes="term-soft" IsVisible="{Binding CheckHasResults}">
+                        <ItemsControl Margin="0,6" ItemsSource="{Binding CheckRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="svc:TermitusCheckRowData">
+                                    <Grid Margin="16,9" ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Classes="term-mark" Classes.ok="{Binding IsOk}" Classes.slow="{Binding IsSlow}" Classes.fail="{Binding IsFail}" Text="{Binding Mark}" />
+                                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Classes="term-row-title" Text="{Binding Title}" />
+                                                <TextBlock VerticalAlignment="Bottom" FontSize="12.5" Foreground="{DynamicResource TermMuted}" Text="{Binding Protocol}" />
+                                            </StackPanel>
+                                            <TextBlock Classes="term-hint" Text="{Binding Explain}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Classes="term-ping" VerticalAlignment="Top" Text="{Binding MsText}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                    <TextBlock Margin="4,10,0,0" Classes="term-hint" IsVisible="{Binding CheckHasResults}" Text="{Binding Loc.CheckLegend}" TextWrapping="Wrap" />
+                    <Button Margin="0,12,0,0" HorizontalAlignment="Left" Classes="term-secondary" Command="{Binding ReportConnectCmd}" Content="{Binding Loc.CheckReport}" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Settings -->
+            <ScrollViewer x:Name="pageSettings" IsVisible="{Binding ShowSettings}" VerticalScrollBarVisibility="Auto">
+                <StackPanel Width="560" Margin="0,28,0,24" HorizontalAlignment="Center">
+                    <TextBlock Classes="term-h1" Text="{Binding Loc.SettingsTitle}" />
+
+                    <TextBlock Classes="term-section" Text="{Binding Loc.SettingsStartup}" />
+                    <Border Padding="18,16" Classes="term-card">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.AutoRunTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.AutoRunHint}" />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    IsChecked="{Binding AutoRun, Mode=TwoWay}"
+                                    OffContent=""
+                                    OnContent=""
+                                    ToolTip.Tip="{Binding Loc.AutoRunHint}" />
+                            </Grid>
+                            <Border Height="1" Margin="0,14" Background="{DynamicResource TermLine}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.AllTrafficTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.AllTrafficHint}" />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    IsChecked="{Binding AllTraffic, Mode=TwoWay}"
+                                    OffContent=""
+                                    OnContent=""
+                                    ToolTip.Tip="{Binding Loc.AllTrafficHint}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Classes="term-section" Text="{Binding Loc.SettingsAppearance}" />
+                    <StackPanel>
+                            <Button Classes="term-row" Classes.selected="{Binding ThemeSystem}" Command="{Binding SetThemeCmd}" CommandParameter="system" ToolTip.Tip="{Binding Loc.ThemeSystemHint}">
+                                <StackPanel>
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.ThemeSystemTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.ThemeSystemHint}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="term-row" Classes.selected="{Binding ThemeLight}" Command="{Binding SetThemeCmd}" CommandParameter="light" ToolTip.Tip="{Binding Loc.ThemeLightHint}">
+                                <StackPanel>
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.ThemeLightTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.ThemeLightHint}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="term-row" Classes.selected="{Binding ThemeDark}" Command="{Binding SetThemeCmd}" CommandParameter="dark" ToolTip.Tip="{Binding Loc.ThemeDarkHint}">
+                                <StackPanel>
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.ThemeDarkTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.ThemeDarkHint}" />
+                                </StackPanel>
+                            </Button>
+                    </StackPanel>
+
+                    <TextBlock Classes="term-section" Text="{Binding Loc.SettingsSecurity}" />
+                    <Border Padding="18,16" Classes="term-card">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                <TextBlock Classes="term-row-title" Text="{Binding Loc.KillSwitchTitle}" />
+                                <TextBlock Classes="term-hint" Text="{Binding Loc.KillSwitchHint}" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                IsChecked="{Binding KillSwitch, Mode=TwoWay}"
+                                OffContent=""
+                                OnContent=""
+                                ToolTip.Tip="{Binding Loc.KillSwitchHint}" />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Classes="term-section" Text="{Binding Loc.SettingsRouting}" />
+                        <Button
+                            Classes="term-row"
+                            Classes.selected="{Binding RouteExceptRu}"
+                            Command="{Binding SetRoutingCmd}"
+                            CommandParameter="except_ru"
+                            ToolTip.Tip="{Binding Loc.RouteExceptRuHint}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Classes="term-row-title" Text="{Binding Loc.RouteExceptRuTitle}" />
+                                    <Border Margin="8,0,0,0" Padding="8,2" CornerRadius="8" Background="{DynamicResource TermSurface2}" VerticalAlignment="Center">
+                                        <TextBlock FontSize="11" Foreground="{DynamicResource TermPingGood}" Text="{Binding Loc.Recommended}" />
+                                    </Border>
+                                    </StackPanel>
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.RouteExceptRuHint}" />
+                                </StackPanel>
+                                <Path
+                                    Grid.Column="1"
+                                    Width="14"
+                                    Height="11"
+                                    VerticalAlignment="Center"
+                                    Data="M1 6 L5 10 L13 1"
+                                    IsVisible="{Binding RouteExceptRu}"
+                                    Stretch="Uniform"
+                                    Stroke="{DynamicResource TermPingGood}"
+                                    StrokeLineCap="Round"
+                                    StrokeThickness="2" />
+                            </Grid>
+                        </Button>
+                        <Button
+                            Classes="term-row"
+                            Classes.selected="{Binding RouteBlockedOnly}"
+                            Command="{Binding SetRoutingCmd}"
+                            CommandParameter="blocked"
+                            ToolTip.Tip="{Binding Loc.RouteBlockedHint}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Classes="term-row-title" Text="{Binding Loc.RouteBlockedTitle}" />
+                                    </StackPanel>
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.RouteBlockedHint}" />
+                                </StackPanel>
+                                <Path
+                                    Grid.Column="1"
+                                    Width="14"
+                                    Height="11"
+                                    VerticalAlignment="Center"
+                                    Data="M1 6 L5 10 L13 1"
+                                    IsVisible="{Binding RouteBlockedOnly}"
+                                    Stretch="Uniform"
+                                    Stroke="{DynamicResource TermPingGood}"
+                                    StrokeLineCap="Round"
+                                    StrokeThickness="2" />
+                            </Grid>
+                        </Button>
+                        <Button
+                            Classes="term-row"
+                            Classes.selected="{Binding RouteAll}"
+                            Command="{Binding SetRoutingCmd}"
+                            CommandParameter="all"
+                            ToolTip.Tip="{Binding Loc.RouteAllHint}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Classes="term-row-title" Text="{Binding Loc.RouteAllTitle}" />
+                                    </StackPanel>
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.RouteAllHint}" />
+                                </StackPanel>
+                                <Path
+                                    Grid.Column="1"
+                                    Width="14"
+                                    Height="11"
+                                    VerticalAlignment="Center"
+                                    Data="M1 6 L5 10 L13 1"
+                                    IsVisible="{Binding RouteAll}"
+                                    Stretch="Uniform"
+                                    Stroke="{DynamicResource TermPingGood}"
+                                    StrokeLineCap="Round"
+                                    StrokeThickness="2" />
+                            </Grid>
+                        </Button>
+
+                    <TextBlock Classes="term-section" Text="{Binding Loc.UpdatesSection}" />
+                    <Border Padding="18,16" Classes="term-card">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.AutoUpdateTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.AutoUpdateHint}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    IsChecked="{Binding AutoUpdate, Mode=TwoWay}"
+                                    OffContent=""
+                                    OnContent="" />
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <Button Classes="term-secondary" Command="{Binding UpdateCheckCmd}" Content="{Binding Loc.UpdateCheckNow}" IsEnabled="{Binding !IsCheckingUpdate}" />
+                                <TextBlock VerticalAlignment="Center" Classes="term-hint" MaxWidth="320" Text="{Binding UpdateCheckResult}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Classes="term-section" Text="{Binding Loc.AboutSection}" />
+                    <Border Padding="18,16" Classes="term-card">
+                        <StackPanel Spacing="10">
+                            <TextBlock Classes="term-row-title" Text="{Binding AppVersion}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.SourceCodeTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.SourceCodeHint}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button Grid.Column="1" VerticalAlignment="Center" Classes="term-secondary" Command="{Binding OpenSourceCmd}" Content="{Binding Loc.SourceCodeTitle}" />
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource TermLine}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.LicensesTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.LicensesHint}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button Grid.Column="1" VerticalAlignment="Center" Classes="term-secondary" Command="{Binding OpenLicensesCmd}" Content="{Binding Loc.LicensesTitle}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Account: subscription status, traffic, devices -->
+            <ScrollViewer x:Name="pageAccount" IsVisible="{Binding ShowAccount}" VerticalScrollBarVisibility="Auto">
+                <StackPanel Width="560" Margin="0,28,0,24" HorizontalAlignment="Center">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="term-h1" Text="{Binding Loc.AccountTitle}" />
+                        <Button
+                            Grid.Column="1"
+                            VerticalAlignment="Top"
+                            Classes="term-secondary"
+                            Command="{Binding RefreshAccountCmd}"
+                            IsEnabled="{Binding !IsAccountRefreshing}"
+                            IsVisible="{Binding AccountSignedIn}"
+                            ToolTip.Tip="{Binding Loc.TipRefreshAccount}">
+                            <Panel>
+                                <TextBlock FontSize="13" IsVisible="{Binding !IsAccountRefreshing}" Text="{Binding Loc.Refresh}" />
+                                <TextBlock FontSize="13" Foreground="{DynamicResource TermMuted}" IsVisible="{Binding IsAccountRefreshing}" Text="{Binding Loc.Refreshing}" />
+                            </Panel>
+                        </Button>
+                    </Grid>
+
+                    <!-- 0.4.1: our server is unreachable (offline, or another VPN app in the way) -->
+                    <Border Margin="0,0,0,6" Padding="18,16" Classes="term-soft" IsVisible="{Binding AccountOffline}">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Margin="0,1,14,0" VerticalAlignment="Top" Classes="term-offline-icon" />
+                            <StackPanel Grid.Column="1" Margin="0,0,14,0" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Loc.NoConnection}" TextWrapping="Wrap" />
+                                <TextBlock Classes="term-hint" IsVisible="{Binding AccountShowingSaved}" Text="{Binding Loc.ShowingSaved}" />
+                            </StackPanel>
+                            <Button
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Classes="term-secondary"
+                                Command="{Binding RetryAccountCmd}"
+                                IsEnabled="{Binding !IsAccountRefreshing}">
+                                <Panel>
+                                    <TextBlock FontSize="13" IsVisible="{Binding !IsAccountRefreshing}" Text="{Binding Loc.Retry}" />
+                                    <TextBlock FontSize="13" Foreground="{DynamicResource TermMuted}" IsVisible="{Binding IsAccountRefreshing}" Text="{Binding Loc.Refreshing}" />
+                                </Panel>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- 0.4.1: no subscription on this computer (first run, or after «Выйти») -->
+                    <Border Padding="22,20" Classes="term-soft" IsVisible="{Binding !AccountSignedIn}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="term-acc-status" Text="{Binding Loc.SignedOutTitle}" />
+                            <TextBlock FontSize="14" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.SignedOutHint}" TextWrapping="Wrap" />
+                            <Button Margin="0,12,0,0" HorizontalAlignment="Left" Classes="term-primary" Command="{Binding SignInCmd}" Content="{Binding Loc.SignIn}" />
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel IsVisible="{Binding AccountSignedIn}">
+                    <!-- 0.4.1: the Telegram account (when the backend sends it in /info) -->
+                    <StackPanel IsVisible="{Binding HasTelegram}">
+                        <TextBlock Classes="term-section" Text="{Binding Loc.TelegramTitle}" />
+                        <Border Padding="18,16" Classes="term-card">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <Border Grid.Column="0" Width="34" Height="34" Margin="0,0,12,0" VerticalAlignment="Center" Background="#2AABEE" CornerRadius="17">
+                                    <Path Width="15" Height="13" Data="M1 7.5 L19 1 L15.5 18 L10 13 L7 16.5 L7 11.5 L15 4 L5.5 10.5 Z" Fill="White" Stretch="Uniform" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Classes="term-row-title" Text="{Binding AccountTelegram}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.TelegramHint}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <TextBlock Classes="term-section" Text="{Binding Loc.AccountSubscription}" />
+                    <Border Padding="18,16" Classes="term-card">
+                        <StackPanel Spacing="4">
+                            <TextBlock
+                                Classes="term-acc-status"
+                                Classes.bad="{Binding AccountBad}"
+                                Classes.ok="{Binding AccountOk}"
+                                Classes.warn="{Binding AccountWarn}"
+                                Text="{Binding AccountStatusTitle}" />
+                            <TextBlock FontSize="15" Foreground="{DynamicResource TermText}" Text="{Binding AccountStatusDetail}" TextWrapping="Wrap" />
+                            <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto" IsVisible="{Binding HasAccountPlan}">
+                                <TextBlock Grid.Column="0" Classes="term-hint" Text="{Binding Loc.Plan}" />
+                                <TextBlock Grid.Column="1" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding AccountPlan}" />
+                            </Grid>
+                            <Button
+                                Margin="0,14,0,0"
+                                HorizontalAlignment="Left"
+                                Classes="term-primary"
+                                Command="{Binding RenewCmd}"
+                                Content="{Binding Loc.RenewInTelegram}"
+                                ToolTip.Tip="{Binding Loc.TipRenew}" />
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel IsVisible="{Binding HasBalance}">
+                        <TextBlock Classes="term-section" Text="{Binding Loc.Balance}" />
+                        <Border Padding="18,16" Classes="term-card">
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="txtBalance" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding AccountBalance}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.BalanceHint}" />
+                                </StackPanel>
+                                <Button
+                                    Grid.Column="2"
+                                    VerticalAlignment="Center"
+                                    Classes="term-primary"
+                                    Command="{Binding TopupCmd}"
+                                    Content="{Binding Loc.TopUp}"
+                                    IsVisible="{Binding HasTopup}"
+                                    ToolTip.Tip="{Binding Loc.TipTopUp}" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding HasAccountTraffic}">
+                        <TextBlock Classes="term-section" Text="{Binding Loc.AccountUsage}" />
+                        <Border Padding="18,16" Classes="term-card">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.TrafficUsed}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.TrafficHint}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding AccountTraffic}" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding HasAccountDevices}">
+                        <TextBlock Classes="term-section" Text="{Binding Loc.AccountDevicesTitle}" />
+                        <Border Padding="18,16" Classes="term-card">
+                            <StackPanel>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                        <TextBlock Classes="term-row-title" Text="{Binding Loc.AccountDevicesTitle}" />
+                                        <TextBlock Classes="term-hint" Text="{Binding Loc.DevicesHint}" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding AccountDevices}" />
+                                </Grid>
+                                <ItemsControl Margin="0,10,0,0" IsVisible="{Binding HasDeviceList}" ItemsSource="{Binding AccountDeviceList}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:TermitusDeviceRow">
+                                            <Grid Margin="0,6,0,0" ColumnDefinitions="Auto,*,Auto">
+                                                <Ellipse Grid.Column="0" Width="7" Height="7" Margin="0,0,10,0" VerticalAlignment="Center" Fill="{DynamicResource TermPingGood}" IsVisible="{Binding IsActive}" />
+                                                <Ellipse Grid.Column="0" Width="7" Height="7" Margin="0,0,10,0" VerticalAlignment="Center" Fill="{DynamicResource TermMuted}" IsVisible="{Binding !IsActive}" />
+                                                <TextBlock Grid.Column="1" FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="2" Margin="10,0,0,0" FontSize="12.5" Foreground="{DynamicResource TermMuted}" IsVisible="{Binding HasPlatform}" Text="{Binding Platform}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <TextBlock Margin="4,16,0,0" Classes="term-hint" Text="{Binding AccountUpdated}" />
+
+                    <!-- 0.4.1: «Выйти» (asks first) -->
+                    <Button
+                        Margin="0,26,0,0"
+                        Classes="term-row term-danger-row"
+                        Command="{Binding LogoutAskCmd}"
+                        IsEnabled="{Binding !IsLoggingOut}">
+                        <TextBlock HorizontalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TermErr}" Text="{Binding Loc.Logout}" />
+                    </Button>
+                    <TextBlock Margin="4,0,0,0" HorizontalAlignment="Center" Classes="term-hint" Text="{Binding Loc.LogoutRowHint}" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Support: knowledge base + contact -->
+            <ScrollViewer x:Name="pageSupport" IsVisible="{Binding ShowSupport}" VerticalScrollBarVisibility="Auto">
+                <StackPanel Width="560" Margin="0,28,0,24" HorizontalAlignment="Center">
+                    <TextBlock Classes="term-h1" Text="{Binding Loc.SupportTitle}" />
+
+                    <!-- 0.6: report a problem / connection check -->
+                    <Button Classes="term-row" Command="{Binding ReportOpenCmd}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                <TextBlock Classes="term-row-title" Text="{Binding Loc.SupportReportTitle}" />
+                                <TextBlock Classes="term-hint" Text="{Binding Loc.SupportReportHint}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Path Grid.Column="1" Width="9" Height="16" VerticalAlignment="Center" Data="M1 1 L8 8 L1 15" Stretch="Uniform" Stroke="{DynamicResource TermMuted}" StrokeLineCap="Round" StrokeThickness="2" />
+                        </Grid>
+                    </Button>
+                    <Button Classes="term-row" Command="{Binding NavCmd}" CommandParameter="check">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                <TextBlock Classes="term-row-title" Text="{Binding Loc.SupportCheckTitle}" />
+                                <TextBlock Classes="term-hint" Text="{Binding Loc.SupportCheckHint}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Path Grid.Column="1" Width="9" Height="16" VerticalAlignment="Center" Data="M1 1 L8 8 L1 15" Stretch="Uniform" Stroke="{DynamicResource TermMuted}" StrokeLineCap="Round" StrokeThickness="2" />
+                        </Grid>
+                    </Button>
+                    <Border Height="10" />
+
+                    <!-- Chat (0.4): shown once <subscription>/support answers; else the bot button below -->
+                    <StackPanel IsVisible="{Binding SupportChatVisible}">
+                        <Border Classes="term-soft">
+                            <Grid Height="400" RowDefinitions="*,Auto,Auto">
+                                <ScrollViewer x:Name="chatScroll" Grid.Row="0" Padding="16,16,16,6" VerticalScrollBarVisibility="Auto">
+                                    <Panel>
+                                        <TextBlock Margin="8,40" HorizontalAlignment="Center" Classes="term-hint" IsVisible="{Binding IsSupportLoading}" Text="{Binding Loc.ChatLoading}" />
+                                        <TextBlock Margin="24,40" HorizontalAlignment="Center" Classes="term-hint" IsVisible="{Binding SupportEmpty}" Text="{Binding Loc.ChatEmpty}" TextAlignment="Center" />
+                                        <ItemsControl ItemsSource="{Binding SupportMessages}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vms:TermitusChatRow">
+                                                    <StackPanel Classes="term-msg" Classes.mine="{Binding IsMine}">
+                                                        <Border Classes="term-bubble">
+                                                            <SelectableTextBlock Classes="term-bubble-text" Text="{Binding Text}" />
+                                                        </Border>
+                                                        <TextBlock Classes="term-msg-meta" Text="{Binding Meta}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Panel>
+                                </ScrollViewer>
+                                <!-- 0.4.1: our server is unreachable: a calm bar above the (disabled) input, messages stay readable -->
+                                <Border Grid.Row="1" Padding="16,10" Background="{DynamicResource TermSurface2}" IsVisible="{Binding SupportOffline}">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Path Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center" Classes="term-offline-icon" />
+                                        <TextBlock Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="13" Foreground="{DynamicResource TermText}" Text="{Binding Loc.NoConnection}" TextWrapping="Wrap" />
+                                        <Button Grid.Column="2" VerticalAlignment="Center" Classes="term-secondary" Command="{Binding RetrySupportCmd}" Content="{Binding Loc.Retry}" />
+                                    </Grid>
+                                </Border>
+                                <Border Grid.Row="2" Padding="12,10" BorderBrush="{DynamicResource TermLine}" BorderThickness="0,1,0,0">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBox
+                                            x:Name="txtSupportInput"
+                                            Grid.Column="0"
+                                            MaxHeight="120"
+                                            Margin="0,0,10,0"
+                                            VerticalContentAlignment="Center"
+                                            AcceptsReturn="False"
+                                            CornerRadius="12"
+                                            IsEnabled="{Binding SupportCanType}"
+                                            MaxLength="4000"
+                                            Text="{Binding SupportInput, Mode=TwoWay}"
+                                            TextWrapping="Wrap"
+                                            PlaceholderText="{Binding SupportPlaceholder}" />
+                                        <Button
+                                            Grid.Column="1"
+                                            VerticalAlignment="Bottom"
+                                            Classes="term-primary"
+                                            Command="{Binding SendSupportCmd}"
+                                            Content="{Binding Loc.Send}"
+                                            IsEnabled="{Binding SupportSendEnabled}" />
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <TextBlock Margin="6,8,0,0" FontSize="12.5" Foreground="{DynamicResource TermErr}" IsVisible="{Binding HasSupportError}" Text="{Binding SupportError}" TextWrapping="Wrap" />
+                        <Button Margin="0,6,0,0" HorizontalAlignment="Left" Classes="term-text" Command="{Binding OpenBotCmd}" Foreground="{DynamicResource TermMuted}" Content="{Binding Loc.ChatOrBot}" />
+                    </StackPanel>
+
+                    <TextBlock Margin="4,0,0,10" Classes="term-hint" IsVisible="{Binding SupportGuest}" Text="{Binding Loc.ChatGuest}" />
+                        <Button Classes="term-row" Command="{Binding OpenBotCmd}" IsVisible="{Binding SupportBotVisible}" ToolTip.Tip="{Binding Loc.SupportBotHint}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.SupportBotTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.SupportBotHint}" />
+                                </StackPanel>
+                                <Path Grid.Column="1" Width="9" Height="16" VerticalAlignment="Center" Data="M1 1 L8 8 L1 15" Stretch="Uniform" Stroke="{DynamicResource TermMuted}" StrokeLineCap="Round" StrokeThickness="2" />
+                            </Grid>
+                        </Button>
+
+                    <TextBlock Classes="term-section" Text="{Binding Loc.KbTitle}" />
+                    <ItemsControl ItemsSource="{Binding KnowledgeBase}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vms:TermitusKbItem">
+                                <Expander Classes="term-kb">
+                                    <Expander.Header>
+                                        <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding Question}" TextWrapping="Wrap" />
+                                    </Expander.Header>
+                                    <TextBlock FontSize="13.5" LineHeight="20" Foreground="{DynamicResource TermMuted}" Text="{Binding Answer}" TextWrapping="Wrap" />
+                                </Expander>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Margin="4,12,0,0" Classes="term-hint" Text="{Binding Loc.SupportAdvancedHint}" />
+                </StackPanel>
+            </ScrollViewer>
+
+        </Grid>
+
+        <!-- 0.5: payment sheet: plans, methods, offer, waiting for the payment -->
+        <Panel
+            x:Name="paySheet"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Background="#59000000"
+            IsVisible="{Binding ShowPay}">
+            <Border
+                Width="460"
+                MaxHeight="620"
+                Padding="26,24,26,22"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{DynamicResource TermSurface}"
+                BoxShadow="0 2 6 0 #1F000000, 0 18 48 0 #33000000"
+                CornerRadius="20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="0">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.PayTitle}" />
+                            <Button Grid.Column="1" Classes="term-text" Command="{Binding PayCloseCmd}" Content="{Binding Loc.Close}" />
+                        </Grid>
+
+                        <!-- loading -->
+                        <TextBlock Margin="0,20,0,8" IsVisible="{Binding PayLoading}" Classes="term-hint" Text="{Binding Loc.PayLoadingText}" />
+
+                        <!-- backend has no payment API yet -->
+                        <StackPanel Margin="0,16,0,0" IsVisible="{Binding PayBot}" Spacing="10">
+                            <TextBlock Classes="term-row-title" Text="{Binding Loc.PayBotTitle}" TextWrapping="Wrap" />
+                            <TextBlock Classes="term-hint" Text="{Binding Loc.PayBotHint}" TextWrapping="Wrap" />
+                            <Button HorizontalAlignment="Left" Classes="term-primary" Command="{Binding PayBotCmd}" Content="{Binding Loc.PayOpenBot}" ToolTip.Tip="{Binding Loc.TipPayBot}" />
+                        </StackPanel>
+
+                        <!-- no connection -->
+                        <StackPanel Margin="0,16,0,0" IsVisible="{Binding PayOffline}" Spacing="10">
+                            <TextBlock Classes="term-hint" Text="{Binding Loc.NoConnection}" TextWrapping="Wrap" />
+                            <Button HorizontalAlignment="Left" Classes="term-secondary" Command="{Binding PayRetryCmd}" Content="{Binding Loc.Retry}" />
+                        </StackPanel>
+
+                        <!-- other error -->
+                        <StackPanel Margin="0,16,0,0" IsVisible="{Binding PayError}" Spacing="10">
+                            <TextBlock Classes="term-hint" Text="{Binding Loc.PayErrorText}" TextWrapping="Wrap" />
+                            <Button HorizontalAlignment="Left" Classes="term-secondary" Command="{Binding PayRetryCmd}" Content="{Binding Loc.Retry}" />
+                        </StackPanel>
+
+                        <!-- choose plan + method -->
+                        <StackPanel Margin="0,16,0,0" IsVisible="{Binding PayReady}" Spacing="0">
+                            <TextBlock Classes="term-row-title" Text="{Binding Loc.PayPlansTitle}" />
+                            <TextBlock Classes="term-hint" Margin="0,0,0,8" Text="{Binding Loc.PayPlansHint}" />
+                            <ItemsControl ItemsSource="{Binding PayPlans}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vms:TermitusPayRow">
+                                        <Button
+                                            Classes="term-row"
+                                            Classes.selected="{Binding IsSelected}"
+                                            Padding="16,12"
+                                            Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).PayPickPlanCmd}"
+                                            CommandParameter="{Binding Id}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0" Classes="term-row-title" VerticalAlignment="Center" Text="{Binding Title}" />
+                                                <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TermMuted}" Text="{Binding Caption}" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Classes="term-row-title" Margin="0,10,0,0" Text="{Binding Loc.PayMethodTitle}" />
+                            <TextBlock Classes="term-hint" Margin="0,0,0,8" Text="{Binding Loc.PayMethodHint}" />
+                            <ItemsControl ItemsSource="{Binding PayMethods}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vms:TermitusPayRow">
+                                        <Button
+                                            Classes="term-row"
+                                            Classes.selected="{Binding IsSelected}"
+                                            Padding="16,12"
+                                            Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).PayPickMethodCmd}"
+                                            CommandParameter="{Binding Id}">
+                                            <TextBlock Classes="term-row-title" Text="{Binding Title}" />
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <WrapPanel Margin="2,6,0,0" Orientation="Horizontal">
+                                <TextBlock VerticalAlignment="Center" Classes="term-hint" Text="{Binding Loc.PayAcceptPrefix}" />
+                                <Button
+                                    Padding="0"
+                                    VerticalAlignment="Center"
+                                    Classes="term-text"
+                                    Command="{Binding PayOfferCmd}"
+                                    Content="{Binding Loc.PayOfferLink}"
+                                    IsVisible="{Binding PayHasOffer}"
+                                    ToolTip.Tip="{Binding Loc.TipPayOffer}" />
+                                <TextBlock VerticalAlignment="Center" Classes="term-hint" IsVisible="{Binding !PayHasOffer}" Text="{Binding Loc.PayOfferLink}" />
+                            </WrapPanel>
+                            <Button
+                                Margin="0,16,0,0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Classes="term-primary"
+                                Command="{Binding PayStartCmd}"
+                                Content="{Binding Loc.PayButton}"
+                                IsEnabled="{Binding PayCanStart}"
+                                ToolTip.Tip="{Binding Loc.TipPayButton}" />
+                        </StackPanel>
+
+                        <!-- waiting -->
+                        <StackPanel Margin="0,16,0,0" IsVisible="{Binding PayWaiting}" Spacing="10">
+                            <TextBlock Classes="term-row-title" Text="{Binding Loc.PayWaitingTitle}" />
+                            <TextBlock Classes="term-hint" Text="{Binding PayWaitText}" TextWrapping="Wrap" />
+                            <Button HorizontalAlignment="Left" Classes="term-secondary" Command="{Binding PayCancelWaitCmd}" Content="{Binding Loc.PayCancelWait}" ToolTip.Tip="{Binding Loc.TipPayCancelWait}" />
+                        </StackPanel>
+
+                        <!-- paid -->
+                        <StackPanel Margin="0,16,0,0" IsVisible="{Binding PayDone}" Spacing="10">
+                            <TextBlock FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TermPingGood}" Text="{Binding Loc.PayDoneTitle}" />
+                            <TextBlock Classes="term-hint" Text="{Binding Loc.PayDoneHint}" TextWrapping="Wrap" />
+                            <Button HorizontalAlignment="Left" Classes="term-primary" Command="{Binding PayCloseCmd}" Content="{Binding Loc.Close}" />
+                        </StackPanel>
+
+                        <!-- failed / expired / timed out -->
+                        <StackPanel Margin="0,16,0,0" IsVisible="{Binding PayProblem}" Spacing="10">
+                            <TextBlock Classes="term-hint" Text="{Binding PayProblemText}" TextWrapping="Wrap" />
+                            <Button HorizontalAlignment="Left" Classes="term-secondary" Command="{Binding PayRetryCmd}" Content="{Binding Loc.PayBack}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Panel>
+
+        <!-- 0.6: problem report sheet -->
+        <Panel
+            x:Name="reportSheet"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Background="#59000000"
+            IsVisible="{Binding ShowReport}">
+            <Border
+                Width="520"
+                MaxHeight="660"
+                Padding="26,22,26,20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{DynamicResource TermSurface}"
+                BoxShadow="0 2 6 0 #1F000000, 0 18 48 0 #33000000"
+                CornerRadius="20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="0">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.ReportTitle}" />
+                            <Button Grid.Column="1" Classes="term-text" Command="{Binding ReportCloseCmd}" Content="{Binding Loc.Close}" IsEnabled="{Binding !ReportSending}" />
+                        </Grid>
+
+                        <!-- editing -->
+                        <StackPanel Margin="0,14,0,0" IsVisible="{Binding ReportEditing}" Spacing="0">
+                            <TextBlock Classes="term-row-title" Text="{Binding Loc.ReportWhatTitle}" />
+                            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ReportChips}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:TermitusReportChip">
+                                        <Button
+                                            Margin="0,0,8,8"
+                                            Classes="term-chip-btn"
+                                            Classes.selected="{Binding IsSelected}"
+                                            Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).ReportPickChipCmd}"
+                                            CommandParameter="{Binding Id}"
+                                            Content="{Binding Title}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBox
+                                x:Name="txtReport"
+                                MinHeight="84"
+                                MaxHeight="150"
+                                Margin="0,2,0,0"
+                                AcceptsReturn="True"
+                                CornerRadius="12"
+                                MaxLength="1500"
+                                PlaceholderText="{Binding Loc.ReportTextPlaceholder}"
+                                Text="{Binding ReportText, Mode=TwoWay}"
+                                TextWrapping="Wrap" />
+
+                            <Grid Margin="0,14,0,0" ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Classes="term-row-title" Text="{Binding Loc.ReportAttachTitle}" />
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.ReportAttachHint}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <ToggleSwitch Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding ReportAttach, Mode=TwoWay}" OffContent="" OnContent="" />
+                            </Grid>
+
+                            <StackPanel Margin="0,10,0,0" IsVisible="{Binding ReportAttach}" Spacing="8">
+                                <TextBlock VerticalAlignment="Center" Classes="term-hint" IsVisible="{Binding ReportHasCheck}" Text="{Binding Loc.ReportCheckHave}" />
+                                <TextBlock Classes="term-hint" IsVisible="{Binding ReportCheckMissing}" Text="{Binding Loc.ReportCheckNone}" TextWrapping="Wrap" />
+                                <Button HorizontalAlignment="Left" Classes="term-secondary" Command="{Binding ReportRunCheckCmd}" IsEnabled="{Binding !ReportCheckRunning}" IsVisible="{Binding ReportCheckMissing}">
+                                    <Panel>
+                                        <TextBlock IsVisible="{Binding !ReportCheckRunning}" Text="{Binding Loc.ReportCheckRun}" />
+                                        <TextBlock IsVisible="{Binding ReportCheckRunning}" Text="{Binding Loc.ReportCheckRunningText}" />
+                                    </Panel>
+                                </Button>
+                            </StackPanel>
+
+                            <Expander Classes="term-kb" Margin="0,10,0,0">
+                                <Expander.Header>
+                                    <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.ReportPreviewTitle}" />
+                                </Expander.Header>
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="term-hint" Text="{Binding Loc.ReportPreviewHint}" TextWrapping="Wrap" />
+                                    <TextBox
+                                        x:Name="txtReportPreview"
+                                        MaxHeight="230"
+                                        FontSize="12"
+                                        IsReadOnly="True"
+                                        Text="{Binding ReportPreview, Mode=OneWay}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Expander>
+
+                            <TextBlock Margin="0,8,0,0" FontSize="12.5" Foreground="{DynamicResource TermErr}" IsVisible="{Binding HasReportError}" Text="{Binding ReportError}" TextWrapping="Wrap" />
+                            <Button Margin="0,14,0,0" HorizontalAlignment="Right" Classes="term-primary" Command="{Binding ReportSendCmd}" Content="{Binding Loc.ReportSend}" IsEnabled="{Binding ReportCanSend}" />
+                        </StackPanel>
+
+                        <!-- sending -->
+                        <TextBlock Margin="0,24,0,12" IsVisible="{Binding ReportSending}" Classes="term-hint" Text="{Binding Loc.ReportSendingText}" />
+
+                        <!-- sent -->
+                        <StackPanel Margin="0,18,0,0" IsVisible="{Binding ReportSent}" Spacing="10">
+                            <TextBlock FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TermPingGood}" Text="{Binding Loc.ReportSentTitle}" />
+                            <TextBlock Classes="term-row-title" Text="{Binding Loc.ReportSentBody}" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Classes="term-primary" Command="{Binding ReportToChatCmd}" Content="{Binding Loc.ReportOpenChat}" />
+                                <Button Classes="term-secondary" Command="{Binding ReportCloseCmd}" Content="{Binding Loc.Close}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- offline: draft kept -->
+                        <StackPanel Margin="0,18,0,0" IsVisible="{Binding ReportOffline}" Spacing="10">
+                            <TextBlock Classes="term-row-title" Text="{Binding Loc.ReportOfflineTitle}" />
+                            <TextBlock Classes="term-hint" Text="{Binding Loc.ReportOfflineText}" TextWrapping="Wrap" />
+                            <Expander Classes="term-kb">
+                                <Expander.Header>
+                                    <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.ReportPreviewTitle}" />
+                                </Expander.Header>
+                                <TextBox MaxHeight="200" FontSize="12" IsReadOnly="True" Text="{Binding ReportPreview, Mode=OneWay}" TextWrapping="Wrap" />
+                            </Expander>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Classes="term-primary" Command="{Binding ReportSendCmd}" Content="{Binding Loc.Retry}" />
+                                <Button Classes="term-secondary" Command="{Binding ReportCopyCmd}" Content="{Binding Loc.ReportCopy}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- no chat available: copy + bot -->
+                        <StackPanel Margin="0,18,0,0" IsVisible="{Binding ReportBot}" Spacing="10">
+                            <TextBlock Classes="term-row-title" Text="{Binding Loc.ReportBotTitle}" />
+                            <TextBlock Classes="term-hint" Text="{Binding Loc.ReportBotBody}" TextWrapping="Wrap" />
+                            <TextBox MaxHeight="200" FontSize="12" IsReadOnly="True" Text="{Binding ReportPreview, Mode=OneWay}" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Classes="term-primary" Command="{Binding ReportCopyCmd}" Content="{Binding Loc.ReportCopy}" />
+                                <Button Classes="term-secondary" Command="{Binding OpenBotCmd}" Content="{Binding Loc.PayOpenBot}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Panel>
+
+        <!-- 0.6: update sheet -->
+        <Panel
+            x:Name="updateSheet"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Background="#59000000"
+            IsVisible="{Binding ShowUpdateSheet}">
+            <Border
+                Width="480"
+                MaxHeight="620"
+                Padding="26,22,26,20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{DynamicResource TermSurface}"
+                BoxShadow="0 2 6 0 #1F000000, 0 18 48 0 #33000000"
+                CornerRadius="20">
+                <StackPanel Spacing="0">
+                    <TextBlock FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding UpdateTitle}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,14,0,4" Classes="term-row-title" Text="{Binding Loc.UpdateWhatsNew}" />
+                    <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
+                        <SelectableTextBlock FontSize="14" LineHeight="20" Foreground="{DynamicResource TermText}" Text="{Binding UpdateNotes}" TextWrapping="Wrap" />
+                    </ScrollViewer>
+                    <TextBlock Margin="0,14,0,0" Classes="term-hint" Text="{Binding UpdateStatusText}" TextWrapping="Wrap" />
+                    <ProgressBar Margin="0,10,0,0" IsIndeterminate="{Binding !UpdateProgressKnown}" IsVisible="{Binding UpdateBusyStage}" Maximum="100" Value="{Binding UpdateProgress}" />
+                    <StackPanel Margin="0,20,0,0" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
+                        <Button Classes="term-secondary" Command="{Binding UpdateLaterCmd}" Content="{Binding Loc.UpdateLater}" IsVisible="{Binding UpdateAvailableStage}" />
+                        <Button Classes="term-primary" Command="{Binding UpdateNowCmd}" Content="{Binding Loc.UpdateNow}" IsVisible="{Binding UpdateAvailableStage}" />
+                        <Button Classes="term-primary" Command="{Binding UpdateNowCmd}" Content="{Binding Loc.UpdateRetry}" IsVisible="{Binding UpdateFailedStage}" />
+                        <Button Classes="term-secondary" Command="{Binding UpdateRevealCmd}" Content="{Binding Loc.UpdateDetails}" IsVisible="{Binding UpdateManualStage}" />
+                        <Button Classes="term-secondary" Command="{Binding UpdateCloseCmd}" Content="{Binding Loc.Close}" IsVisible="{Binding !UpdateBusyStage}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Panel>
+
+        <!-- 0.4.1: «Выйти» confirmation sheet (Esc / «Отмена» closes it) -->
+        <Panel
+            x:Name="logoutSheet"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Background="#59000000"
+            IsVisible="{Binding ShowLogoutConfirm}">
+            <Border
+                Width="420"
+                Padding="26,24,26,20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{DynamicResource TermSurface}"
+                BoxShadow="0 2 6 0 #1F000000, 0 18 48 0 #33000000"
+                CornerRadius="20">
+                <StackPanel Spacing="0">
+                    <TextBlock FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.LogoutTitle}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,10,0,0" FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Loc.LogoutBody}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,6,0,0" FontSize="13" LineHeight="18" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.LogoutDeviceNote}" TextWrapping="Wrap" />
+                    <StackPanel Margin="0,22,0,0" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
+                        <Button
+                            x:Name="btnLogoutCancel"
+                            Classes="term-secondary"
+                            Command="{Binding LogoutCancelCmd}"
+                            Content="{Binding Loc.Cancel}"
+                            IsEnabled="{Binding !IsLoggingOut}" />
+                        <Button Classes="term-danger" Command="{Binding LogoutConfirmCmd}" IsEnabled="{Binding !IsLoggingOut}">
+                            <Panel>
+                                <TextBlock Foreground="White" IsVisible="{Binding !IsLoggingOut}" Text="{Binding Loc.Logout}" />
+                                <TextBlock Foreground="White" IsVisible="{Binding IsLoggingOut}" Text="{Binding Loc.LoggingOut}" />
+                            </Panel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Panel>
+    </Grid>
+</UserControl>

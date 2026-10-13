@@ -1,0 +1,240 @@
+<Window
+    x:Class="v2rayN.Desktop.Views.TermitusPopover"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
+    Title="TER"
+    Width="372"
+    x:DataType="vms:TermitusHomeViewModel"
+    Background="Transparent"
+    CanResize="False"
+    ShowActivated="True"
+    ShowInTaskbar="False"
+    SizeToContent="Height"
+    SystemDecorations="None"
+    Topmost="True"
+    TransparencyLevelHint="Transparent"
+    WindowStartupLocation="Manual">
+    <Window.Styles>
+        <Style Selector="Button.pop-power">
+            <Setter Property="Width" Value="92" />
+            <Setter Property="Height" Value="92" />
+            <Setter Property="CornerRadius" Value="46" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.pop-power.connected">
+            <Setter Property="Background" Value="{DynamicResource TermConnectedBrush}" />
+        </Style>
+        <Style Selector="Border.pop-glow">
+            <Setter Property="Width" Value="92" />
+            <Setter Property="Height" Value="92" />
+            <Setter Property="CornerRadius" Value="46" />
+            <Setter Property="BoxShadow" Value="0 8 22 0 #55FF7A45" />
+        </Style>
+        <Style Selector="Border.pop-glow.connected">
+            <Setter Property="BoxShadow" Value="0 8 24 0 #6610B981" />
+        </Style>
+        <Style Selector="Button.pop-row">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Background" Value="{DynamicResource TermSurface2}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.pop-row.selected">
+            <Setter Property="BorderBrush" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1.5" />
+        </Style>
+        <Style Selector="Button.pop-btn">
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Background" Value="{DynamicResource TermSurface2}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.pop-primary">
+            <Setter Property="Padding" Value="14,7" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Background" Value="{DynamicResource TermAccentBrush}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="TextBlock.pop-title">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+        </Style>
+        <Style Selector="TextBlock.pop-muted">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+        </Style>
+        <Style Selector="TextBlock.pop-stat">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermText}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.pop-stat.good">
+            <Setter Property="Foreground" Value="{DynamicResource TermPingGood}" />
+        </Style>
+        <Style Selector="TextBlock.pop-stat.mid">
+            <Setter Property="Foreground" Value="{DynamicResource TermWarn}" />
+        </Style>
+        <Style Selector="TextBlock.pop-stat.bad">
+            <Setter Property="Foreground" Value="{DynamicResource TermErr}" />
+        </Style>
+        <Style Selector="TextBlock.pop-badge">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </Window.Styles>
+
+    <Border
+        Margin="18,4,18,26"
+        Padding="18,16,18,14"
+        Background="{DynamicResource TermSurface}"
+        BorderBrush="{DynamicResource TermLine}"
+        BorderThickness="0.5"
+        BoxShadow="0 12 34 0 #4A000000, 0 2 6 0 #26000000"
+        CornerRadius="18">
+        <StackPanel Spacing="12">
+
+            <!-- Header: logo, name, state -->
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Image Grid.Column="0" Width="26" Height="26" Source="avares://v2rayN/Assets/ter-logo.png" />
+                <TextBlock Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="TER" />
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="6">
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource TermPingGood}" IsVisible="{Binding IsConnected}" />
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource TermMuted}" IsVisible="{Binding !IsConnected}" />
+                    <TextBlock Classes="pop-muted" VerticalAlignment="Center" Text="{Binding PopStatus}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Big toggle -->
+            <StackPanel HorizontalAlignment="Center" Spacing="6">
+                <Border HorizontalAlignment="Center" Classes="pop-glow" Classes.connected="{Binding IsConnected}">
+                    <Button
+                        Classes="pop-power"
+                        Classes.connected="{Binding IsConnected}"
+                        Command="{Binding ConnectToggleCmd}"
+                        IsEnabled="{Binding !IsBusy}"
+                        ToolTip.Tip="{Binding Loc.TipPopToggle}">
+                        <Path
+                            Width="34"
+                            Height="34"
+                            Data="M12 3 L12 12 M6.5 6.5 A8 8 0 1 0 17.5 6.5"
+                            Stretch="Uniform"
+                            Stroke="White"
+                            StrokeLineCap="Round"
+                            StrokeThickness="2.2" />
+                    </Button>
+                </Border>
+                <TextBlock HorizontalAlignment="Center" Classes="pop-muted" Text="{Binding PopSubline}" />
+            </StackPanel>
+
+            <!-- Country -->
+            <Button x:Name="btnCountry" Classes="pop-row" ToolTip.Tip="{Binding Loc.TipPopCountry}">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Panel Grid.Column="0" Width="28" Height="28" VerticalAlignment="Center">
+                        <Ellipse Fill="{DynamicResource TermSurface}" IsVisible="{Binding HasLocationBadge}" />
+                        <TextBlock Classes="pop-badge" IsVisible="{Binding HasLocationBadge}" Text="{Binding LocationBadge}" />
+                        <Border Background="{DynamicResource TermAccentBrush}" CornerRadius="14" IsVisible="{Binding !HasLocationBadge}">
+                            <Path Width="11" Height="14" Data="M7 0 L0 9 L5 9 L4 16 L11 7 L6 7 Z" Fill="White" Stretch="Uniform" />
+                        </Border>
+                    </Panel>
+                    <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+                        <TextBlock Classes="pop-title" Text="{Binding LocationName}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Classes="pop-muted" Text="{Binding LocationDetail}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Path Grid.Column="2" x:Name="countryChevron" Width="9" Height="6" VerticalAlignment="Center" Data="M1 1 L5 5 L9 1" Stretch="Uniform" Stroke="{DynamicResource TermMuted}" StrokeLineCap="Round" StrokeThickness="1.6" />
+                </Grid>
+            </Button>
+            <ScrollViewer x:Name="countryList" MaxHeight="176" IsVisible="False" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="4">
+                    <Button Classes="pop-row" Classes.selected="{Binding IsAutoChoice}" Command="{Binding SelectLocationCmd}" CommandParameter="">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Border Width="22" Height="22" Background="{DynamicResource TermAccentBrush}" CornerRadius="11">
+                                <Path Width="9" Height="12" Data="M7 0 L0 9 L5 9 L4 16 L11 7 L6 7 Z" Fill="White" Stretch="Uniform" />
+                            </Border>
+                            <TextBlock Classes="pop-title" VerticalAlignment="Center" Text="{Binding Loc.AutoTitle}" />
+                        </StackPanel>
+                    </Button>
+                    <ItemsControl ItemsSource="{Binding Locations}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vms:TermitusLocationRow">
+                                <Button
+                                    Margin="0,0,0,4"
+                                    Classes="pop-row"
+                                    Classes.selected="{Binding IsSelected}"
+                                    Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).SelectLocationCmd}"
+                                    CommandParameter="{Binding Key}">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Panel Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center">
+                                            <Ellipse Fill="{DynamicResource TermSurface}" />
+                                            <TextBlock Classes="pop-badge" Text="{Binding Badge}" />
+                                        </Panel>
+                                        <TextBlock Grid.Column="1" Margin="10,0" VerticalAlignment="Center" Classes="pop-title" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Classes="pop-muted" Text="{Binding PingText}" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Live speed (while connected) -->
+            <Border Padding="12,10,12,6" Background="{DynamicResource TermSurface2}" CornerRadius="12" IsVisible="{Binding IsConnected}">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,*,*">
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Classes="pop-stat" Classes.bad="{Binding LivePingBad}" Classes.good="{Binding LivePingGood}" Classes.mid="{Binding LivePingMid}" Text="{Binding LivePingText}" />
+                            <TextBlock HorizontalAlignment="Center" Classes="pop-muted" Text="{Binding Loc.StatPing}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Classes="pop-stat" Text="{Binding LiveDownText}" />
+                            <TextBlock HorizontalAlignment="Center" Classes="pop-muted" Text="{Binding Loc.StatDown}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Classes="pop-stat" Text="{Binding LiveUpText}" />
+                            <TextBlock HorizontalAlignment="Center" Classes="pop-muted" Text="{Binding Loc.StatUp}" />
+                        </StackPanel>
+                    </Grid>
+                    <Panel Height="28">
+                        <Path Data="{Binding GraphDownPath}" Fill="#33FF7A45" Stroke="{DynamicResource TermAccentBrush}" StrokeThickness="1.2" StrokeJoin="Round" Stretch="Fill" />
+                    </Panel>
+                </StackPanel>
+            </Border>
+
+            <!-- Subscription -->
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Orientation="Horizontal" Spacing="7">
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource TermPingGood}" IsVisible="{Binding AccountOk}" />
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource TermWarn}" IsVisible="{Binding SubChipWarn}" />
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource TermErr}" IsVisible="{Binding SubChipExpired}" />
+                    <TextBlock Classes="pop-muted" VerticalAlignment="Center" Text="{Binding Loc.PopSubscription}" />
+                    <TextBlock Classes="pop-title" FontSize="13" VerticalAlignment="Center" Text="{Binding SubChipText}" />
+                </StackPanel>
+                <Button x:Name="btnRenew" Grid.Column="1" Classes="pop-primary" Content="{Binding Loc.Renew}" IsVisible="{Binding ShowExpiryBanner}" ToolTip.Tip="{Binding Loc.TipRenew}" />
+            </Grid>
+
+            <!-- Footer -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Button x:Name="btnOpen" Grid.Column="0" Classes="pop-btn" Content="{Binding Loc.PopOpen}" ToolTip.Tip="{Binding Loc.TipPopOpen}" />
+                <Button x:Name="btnQuit" Grid.Column="1" Classes="pop-btn" Content="{Binding Loc.PopQuit}" ToolTip.Tip="{Binding Loc.TipPopQuit}" />
+            </Grid>
+        </StackPanel>
+    </Border>
+</Window>
