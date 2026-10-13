@@ -38,6 +38,14 @@ namespace v2rayN.Desktop.Common;
 ///   update-check / update-now / update-later / update-open / update-close / autoupdate:0|1   the updater (0.6)
 ///   scroll-end:PAGE  scroll settings|support|check to the bottom
 ///   dump2:LABEL      log the 0.6 state (check rows + advice, report stage + preview, error card, updater)
+///   Account 2.0 (devices / friends / payments / change link; talks to the fake backend):
+///   acc-devices      (re)load the three cards   acc-menu[:ID] open the ⋯ row menu (default: first other device)
+///   acc-invite       «Добавить устройство» (pay sheet when past the free limit, otherwise the QR)   acc-invite-pay   «Продолжить» in the pay sheet
+///   acc-rename-ask[:ID] / acc-rename:TEXT   the rename sheet / type TEXT and save
+///   acc-remove-ask[:ID] / acc-remove        the remove sheet / confirm it   acc-manage[:ID]   give/take managing
+///   acc-friends      scroll to the «Друзья» card   acc-reward:money|days   acc-payments   scroll to «Оплаты»   acc-payments-all   expand
+///   acc-rotate-ask / acc-rotate   «Сменить ссылку» sheet / confirm   acc-relogin   «Войти заново» (guest card)   acc-close   close the sheet
+///   scroll-acct:FRACTION   scroll the account page (0 top .. 1 bottom)   dump3:LABEL   log the Account 2.0 state
 ///   quit             close the app
 /// </summary>
 internal static class TermitusSelfTest
@@ -231,6 +239,36 @@ internal static class TermitusSelfTest
 
                 case "dump2":
                     Dump2(vm, arg);
+                    break;
+
+                case "dump3":
+                    Log($"dump3 {arg}: {vm.DebugAcct2State()}");
+                    break;
+
+                case "scroll-acct":
+                    view.DebugScrollAccount(double.Parse(arg, System.Globalization.CultureInfo.InvariantCulture));
+                    await Task.Delay(400);
+                    break;
+
+                case "acc-devices":
+                    await vm.DebugAcct2Async("load", arg);
+                    await Task.Delay(600);
+                    break;
+
+                case "acc-friends":
+                    view.DebugScrollAccount(0.62);
+                    await Task.Delay(400);
+                    break;
+
+                case "acc-payments":
+                    view.DebugScrollAccount(1);
+                    await Task.Delay(400);
+                    break;
+
+                case "acc-menu" or "acc-invite" or "acc-invite-pay" or "acc-rename-ask" or "acc-rename" or "acc-remove-ask" or "acc-remove"
+                    or "acc-manage" or "acc-reward" or "acc-payments-all" or "acc-rotate-ask" or "acc-rotate" or "acc-relogin" or "acc-close":
+                    await vm.DebugAcct2Async(cmd[4..], arg);
+                    await Task.Delay(900);
                     break;
 
                 case "report":

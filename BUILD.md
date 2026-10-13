@@ -287,3 +287,12 @@ termitus/tools/live_fake.sh "wait:3000,import,wait:8000,update-check,dump2:u,upd
     APP_DIR=... TER_TEST_UPDATE_URL=... TER_TEST_UPDATE_PUBKEY=... TER_TEST_UPDATE_TARGET=... REQ_LOG=$TMPDIR/req.log
 ```
 Шаги тура и переменные — шапка `TermitusSelfTest.cs` и `TermitusTestHooks.cs`.
+
+Живая проверка Account 2.0 (устройства / друзья / оплаты / «Сменить ссылку»), 0.6.3: фейк отвечает на `/subscription/TESTTOKEN/account/*`.
+```bash
+termitus/tools/live_fake.sh "wait:3000,import,wait:12000,theme:dark,nav:account,wait:3500,scroll-acct:0.45,acc-menu,shot:a1,acc-rename-ask,shot:a2,acc-close,acc-invite,shot:a3,acc-invite-pay,shot:a4,dump3:state,quit" ACCOUNT_MANY=1
+#   ACCOUNT_GUEST=1 — все /account/* отвечают 403 («Подпиской управляет её владелец», «Войти заново»: шаг acc-relogin)
+#   INVITE_BALANCE=20 — «не хватает баланса» (402) в добавлении устройства;  INVITE_FREE=1 — приглашение без доплаты
+#   ACCOUNT_EMPTY=1 — нет оплат и друзей;  ACCOUNT_MANY=1 — 14 оплат («Показать все»)
+```
+Шаги `acc-*`, `scroll-acct:0..1`, `dump3:LABEL` — шапка `TermitusSelfTest.cs`. Данные грузятся при открытии «Аккаунта» и по «Обновить», по таймеру — никогда.

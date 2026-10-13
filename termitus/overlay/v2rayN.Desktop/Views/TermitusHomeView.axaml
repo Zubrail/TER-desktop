@@ -471,6 +471,21 @@
             <Setter Property="Margin" Value="0,0,0,8" />
             <Setter Property="CornerRadius" Value="16" />
         </Style>
+        <Style Selector="Border.term-pill">
+            <Setter Property="Background" Value="{DynamicResource TermSurface2}" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="7,2" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.term-pill-text">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TermMuted}" />
+        </Style>
+        <Style Selector="TextBlock.term-pill-text.accent">
+            <Setter Property="Foreground" Value="{DynamicResource TermAccentBrush}" />
+        </Style>
     </UserControl.Styles>
 
     <!-- TER simple UI: sidebar (Главная / Серверы / Настройки / Поддержка) + one page -->
@@ -1436,6 +1451,21 @@
                         </Grid>
                     </Border>
 
+                    <!-- Account 2.0: devices/friends/payments could not be loaded -->
+                    <Border Margin="0,0,0,6" Padding="18,16" Classes="term-soft" IsVisible="{Binding Acct2Offline}">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Margin="0,1,14,0" VerticalAlignment="Top" Classes="term-offline-icon" />
+                            <TextBlock Grid.Column="1" Margin="0,0,14,0" VerticalAlignment="Center" FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Loc.NoConnection}" TextWrapping="Wrap" />
+                            <Button Grid.Column="2" VerticalAlignment="Center" Classes="term-secondary" Command="{Binding Acct2RetryCmd}" Content="{Binding Loc.Retry}" />
+                        </Grid>
+                    </Border>
+                    <Border Margin="0,0,0,6" Padding="18,16" Classes="term-soft" IsVisible="{Binding Acct2LoadError}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center" FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Loc.AcctLoadFailed}" TextWrapping="Wrap" />
+                            <Button Grid.Column="1" VerticalAlignment="Center" Classes="term-secondary" Command="{Binding Acct2RetryCmd}" Content="{Binding Loc.Retry}" />
+                        </Grid>
+                    </Border>
+
                     <!-- 0.4.1: no subscription on this computer (first run, or after «Выйти») -->
                     <Border Padding="22,20" Classes="term-soft" IsVisible="{Binding !AccountSignedIn}">
                         <StackPanel Spacing="6">
@@ -1519,6 +1549,7 @@
                         </Border>
                     </StackPanel>
 
+                    <StackPanel IsVisible="{Binding !Acct2Manager}">
                     <StackPanel IsVisible="{Binding HasAccountDevices}">
                         <TextBlock Classes="term-section" Text="{Binding Loc.AccountDevicesTitle}" />
                         <Border Padding="18,16" Classes="term-card">
@@ -1546,7 +1577,178 @@
                         </Border>
                     </StackPanel>
 
+                    </StackPanel>
+
+                    <!-- Account 2.0 (0.6.3): devices / friends / payments for a managing device, one card otherwise -->
+                    <TextBlock Margin="4,16,0,0" Classes="term-hint" IsVisible="{Binding Acct2Loading}" Text="{Binding Loc.AcctDevicesLoading}" />
+
+                    <!-- not a managing device -->
+                    <StackPanel IsVisible="{Binding Acct2Guest}">
+                        <TextBlock Classes="term-section" Text="{Binding Loc.AcctGuestSection}" />
+                        <Border Padding="18,16" Classes="term-card">
+                            <StackPanel Spacing="12">
+                                <TextBlock FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Loc.AcctGuestBody}" TextWrapping="Wrap" />
+                                <Button HorizontalAlignment="Left" Classes="term-primary" Command="{Binding AcctReloginCmd}" Content="{Binding Loc.AcctGuestButton}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding Acct2Manager}">
+                        <!-- Devices -->
+                        <TextBlock Classes="term-section" Text="{Binding Loc.AcctDevicesTitle}" />
+                        <Border Padding="18,14,18,16" Classes="term-card">
+                            <StackPanel>
+                                <TextBlock Classes="term-hint" Margin="0,0,0,4" Text="{Binding Loc.AcctDevicesHint}" />
+                                <ItemsControl ItemsSource="{Binding AcctDevices}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vms:TermitusAcctDeviceRow">
+                                            <StackPanel>
+                                                <Border Height="0.5" Margin="0,8,0,0" Background="{DynamicResource TermLine}" />
+                                                <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center" Spacing="3">
+                                                        <WrapPanel Orientation="Horizontal">
+                                                            <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                            <Border Classes="term-pill" IsVisible="{Binding IsThis}"><TextBlock Classes="term-pill-text accent" Text="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).Loc.AcctThisDevice}" /></Border>
+                                                            <Border Classes="term-pill" IsVisible="{Binding Manages}"><TextBlock Classes="term-pill-text" Text="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).Loc.AcctManages}" /></Border>
+                                                            <Border Classes="term-pill" IsVisible="{Binding PaidSlot}"><TextBlock Classes="term-pill-text" Text="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).Loc.AcctPaidSlot}" /></Border>
+                                                            <Border Classes="term-pill" IsVisible="{Binding Paused}"><TextBlock Classes="term-pill-text" Text="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).Loc.AcctPaused}" /></Border>
+                                                        </WrapPanel>
+                                                        <TextBlock FontSize="12.5" Foreground="{DynamicResource TermMuted}" Text="{Binding Meta}" />
+                                                    </StackPanel>
+                                                    <Button
+                                                        Grid.Column="1"
+                                                        VerticalAlignment="Center"
+                                                        Classes="term-text"
+                                                        Padding="10,10"
+                                                        Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).AcctMenuCmd}"
+                                                        CommandParameter="{Binding Id}"
+                                                        ToolTip.Tip="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).Loc.AcctRowMenu}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="3">
+                                                            <Ellipse Width="4" Height="4" Fill="{DynamicResource TermMuted}" />
+                                                            <Ellipse Width="4" Height="4" Fill="{DynamicResource TermMuted}" />
+                                                            <Ellipse Width="4" Height="4" Fill="{DynamicResource TermMuted}" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </Grid>
+                                                <WrapPanel Margin="0,10,0,0" IsVisible="{Binding MenuOpen}" Orientation="Horizontal">
+                                                    <Button Margin="0,0,8,6" Padding="14,6" Classes="term-secondary" FontSize="13"
+                                                        Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).AcctRenameAskCmd}"
+                                                        CommandParameter="{Binding Id}"
+                                                        Content="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).Loc.AcctRename}" />
+                                                    <Button Margin="0,0,8,6" Padding="14,6" Classes="term-secondary" FontSize="13"
+                                                        IsVisible="{Binding CanToggleManage}"
+                                                        Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).AcctManageCmd}"
+                                                        CommandParameter="{Binding Id}"
+                                                        Content="{Binding ManageText}" />
+                                                    <Button Margin="0,0,8,6" Padding="14,6" Classes="term-secondary" FontSize="13"
+                                                        Foreground="{DynamicResource TermErr}"
+                                                        Command="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).AcctRemoveAskCmd}"
+                                                        CommandParameter="{Binding Id}"
+                                                        Content="{Binding $parent[ItemsControl].((vms:TermitusHomeViewModel)DataContext).Loc.AcctDisable}" />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Margin="0,10,0,0" Classes="term-hint" IsVisible="{Binding !Acct2HasDevices}" Text="{Binding Loc.AcctDevicesEmpty}" />
+                                <Button
+                                    Margin="0,16,0,0"
+                                    HorizontalAlignment="Left"
+                                    Classes="term-primary"
+                                    Command="{Binding AcctInviteCmd}"
+                                    IsEnabled="{Binding !Acct2Inviting}"
+                                    ToolTip.Tip="{Binding Loc.AcctAddDeviceTip}">
+                                    <Panel>
+                                        <TextBlock Foreground="White" IsVisible="{Binding !Acct2Inviting}" Text="{Binding Loc.AcctAddDevice}" />
+                                        <TextBlock Foreground="White" IsVisible="{Binding Acct2Inviting}" Text="{Binding Loc.AcctBusy}" />
+                                    </Panel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Friends -->
+                        <StackPanel IsVisible="{Binding Acct2HasRef}">
+                            <TextBlock Classes="term-section" Text="{Binding Loc.AcctFriendsTitle}" />
+                            <Border Padding="18,16" Classes="term-card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Classes="term-hint" Margin="0" Text="{Binding Loc.AcctFriendsHint}" />
+                                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding RefHasLink}">
+                                        <Border Grid.Column="0" Margin="0,0,10,0" Padding="12,9" VerticalAlignment="Center" Background="{DynamicResource TermSurface2}" CornerRadius="10">
+                                            <TextBlock FontSize="13" Foreground="{DynamicResource TermText}" Text="{Binding RefLink}" TextTrimming="CharacterEllipsis" />
+                                        </Border>
+                                        <Button Grid.Column="1" Classes="term-secondary" Command="{Binding RefCopyCmd}" Content="{Binding Loc.AcctInviteCopy}" />
+                                    </Grid>
+                                    <TextBlock Classes="term-hint" Margin="0" IsVisible="{Binding !RefHasLink}" Text="{Binding Loc.AcctFriendsNoLink}" />
+                                    <Grid ColumnDefinitions="*,*">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding RefInvited}" />
+                                            <TextBlock Classes="term-hint" Margin="0" Text="{Binding Loc.AcctFriendsInvited}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding RefEarned}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Classes="term-hint" Margin="0" Text="{Binding Loc.AcctFriendsEarnedRub}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <StackPanel>
+                                        <TextBlock Classes="term-row-title" Margin="0,0,0,8" Text="{Binding Loc.AcctRewardTitle}" />
+                                        <Grid ColumnDefinitions="*,*">
+                                            <Button Grid.Column="0" Margin="0,0,5,0" Padding="14,12" Classes="term-row" Classes.selected="{Binding RewardIsMoney}" Command="{Binding RefRewardCmd}" CommandParameter="money">
+                                                <TextBlock HorizontalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.AcctRewardMoney}" />
+                                            </Button>
+                                            <Button Grid.Column="1" Margin="5,0,0,0" Padding="14,12" Classes="term-row" Classes.selected="{Binding RewardIsDays}" Command="{Binding RefRewardCmd}" CommandParameter="days">
+                                                <TextBlock HorizontalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.AcctRewardDays}" />
+                                            </Button>
+                                        </Grid>
+                                        <TextBlock Classes="term-hint" Margin="2,4,0,0" Text="{Binding RefRule}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Payments -->
+                        <StackPanel IsVisible="{Binding Acct2HasPayments}">
+                            <TextBlock Classes="term-section" Text="{Binding Loc.AcctPaymentsTitle}" />
+                            <Border Padding="18,8,18,12" Classes="term-card">
+                                <StackPanel>
+                                    <TextBlock Margin="0,8,0,0" Classes="term-hint" IsVisible="{Binding Acct2PaymentsEmpty}" Text="{Binding Loc.AcctPaymentsEmpty}" />
+                                    <ItemsControl ItemsSource="{Binding AcctPayments}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vms:TermitusAcctPayRow">
+                                                <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                                        <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding What}" />
+                                                        <TextBlock FontSize="12.5" Foreground="{DynamicResource TermMuted}" Text="{Binding Caption}" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1" VerticalAlignment="Top" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding Amount}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button
+                                        Margin="-10,8,0,0"
+                                        HorizontalAlignment="Left"
+                                        Classes="term-text"
+                                        Command="{Binding AcctPaymentsToggleCmd}"
+                                        IsVisible="{Binding Acct2PaymentsMore}">
+                                        <Panel>
+                                            <TextBlock FontSize="13" Foreground="{DynamicResource TermAccentBrush}" IsVisible="{Binding !Acct2PaymentsExpanded}" Text="{Binding Loc.AcctShowAll}" />
+                                            <TextBlock FontSize="13" Foreground="{DynamicResource TermAccentBrush}" IsVisible="{Binding Acct2PaymentsExpanded}" Text="{Binding Loc.AcctShowLess}" />
+                                        </Panel>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+
                     <TextBlock Margin="4,16,0,0" Classes="term-hint" Text="{Binding AccountUpdated}" />
+
+                    <!-- Account 2.0: «Сменить ссылку» (asks first) -->
+                    <Button Margin="0,26,0,0" Classes="term-row" Command="{Binding AcctRotateAskCmd}" IsVisible="{Binding Acct2Manager}">
+                        <StackPanel>
+                            <TextBlock HorizontalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.AcctRotateRow}" />
+                            <TextBlock HorizontalAlignment="Center" Classes="term-hint" Text="{Binding Loc.AcctRotateRowHint}" />
+                        </StackPanel>
+                    </Button>
 
                     <!-- 0.4.1: «Выйти» (asks first) -->
                     <Button
@@ -2027,6 +2229,98 @@
                         </Button>
                     </StackPanel>
                 </StackPanel>
+            </Border>
+        </Panel>
+
+        <!-- Account 2.0: one sheet for rename / remove / add a device (pay, no funds, QR) / change link -->
+        <Panel
+            x:Name="acctSheet"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Background="#59000000"
+            IsVisible="{Binding AcctShowSheet}">
+            <Border
+                Width="440"
+                MaxHeight="660"
+                Padding="26,24,26,20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{DynamicResource TermSurface}"
+                BoxShadow="0 2 6 0 #1F000000, 0 18 48 0 #33000000"
+                CornerRadius="20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="0">
+                        <TextBlock FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding AcctSheetTitle}" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,10,0,0" FontSize="14" Foreground="{DynamicResource TermText}" IsVisible="{Binding AcctSheetBody, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Text="{Binding AcctSheetBody}" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,6,0,0" FontSize="13" LineHeight="18" Foreground="{DynamicResource TermMuted}" IsVisible="{Binding AcctSheetNoteVisible}" Text="{Binding Loc.AcctRemoveThisNote}" TextWrapping="Wrap" />
+
+                        <!-- rename -->
+                        <TextBox
+                            x:Name="txtAcctRename"
+                            Margin="0,16,0,0"
+                            IsVisible="{Binding AcctSheetRename}"
+                            MaxLength="100"
+                            Watermark="{Binding Loc.AcctRenamePlaceholder}"
+                            Text="{Binding AcctRenameText, Mode=TwoWay}" />
+
+                        <!-- QR of the one-time join link -->
+                        <StackPanel Margin="0,16,0,0" IsVisible="{Binding AcctSheetQr}" Spacing="12">
+                            <Border HorizontalAlignment="Center" Padding="12" Background="White" BorderBrush="{DynamicResource TermLine}" BorderThickness="1" CornerRadius="14">
+                                <Image x:Name="acctQr" Width="210" Height="210" />
+                            </Border>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Border Grid.Column="0" Margin="0,0,10,0" Padding="12,9" VerticalAlignment="Center" Background="{DynamicResource TermSurface2}" CornerRadius="10">
+                                    <TextBlock FontSize="12" Foreground="{DynamicResource TermText}" Text="{Binding AcctInviteLink}" TextWrapping="Wrap" />
+                                </Border>
+                                <Button Grid.Column="1" Classes="term-secondary" Command="{Binding AcctInviteCopyCmd}" Content="{Binding Loc.AcctInviteCopy}" />
+                            </Grid>
+                            <TextBlock Classes="term-hint" Margin="2,0,0,0" Text="{Binding Loc.AcctInviteOnce}" />
+                        </StackPanel>
+
+                        <!-- new subscription link -->
+                        <Button Margin="0,14,0,0" HorizontalAlignment="Left" Classes="term-secondary" Command="{Binding AcctRotateCopyCmd}" Content="{Binding Loc.AcctRotateCopy}" IsVisible="{Binding AcctSheetRotateDone}" />
+
+                        <TextBlock Margin="0,12,0,0" FontSize="13" Foreground="{DynamicResource TermErr}" IsVisible="{Binding AcctSheetHasError}" Text="{Binding AcctSheetError}" TextWrapping="Wrap" />
+
+                        <StackPanel Margin="0,22,0,0" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
+                            <Button Classes="term-secondary" Command="{Binding AcctSheetCloseCmd}" IsEnabled="{Binding !AcctSheetBusy}" Content="{Binding Loc.Cancel}"
+                                IsVisible="{Binding !AcctSheetCloseOnly}" />
+                            <Button Classes="term-primary" Command="{Binding AcctSheetCloseCmd}" Content="{Binding Loc.Close}" IsVisible="{Binding AcctSheetCloseOnly}" />
+                            <Button x:Name="btnAcctSave" Classes="term-primary" Command="{Binding AcctSheetOkCmd}" IsDefault="True" IsVisible="{Binding AcctSheetRename}">
+                                <Panel>
+                                    <TextBlock Foreground="White" IsVisible="{Binding !AcctSheetBusy}" Text="{Binding Loc.AcctSave}" />
+                                    <TextBlock Foreground="White" IsVisible="{Binding AcctSheetBusy}" Text="{Binding Loc.AcctBusy}" />
+                                </Panel>
+                            </Button>
+                            <Button Classes="term-danger" Command="{Binding AcctSheetOkCmd}" IsEnabled="{Binding !AcctSheetBusy}" IsVisible="{Binding AcctSheetRemove}">
+                                <Panel>
+                                    <TextBlock Foreground="White" IsVisible="{Binding !AcctSheetBusy}" Text="{Binding Loc.AcctRemoveButton}" />
+                                    <TextBlock Foreground="White" IsVisible="{Binding AcctSheetBusy}" Text="{Binding Loc.AcctBusy}" />
+                                </Panel>
+                            </Button>
+                            <Button Classes="term-primary" Command="{Binding AcctSheetOkCmd}" IsEnabled="{Binding !AcctSheetBusy}" IsVisible="{Binding AcctSheetInvitePay}">
+                                <Panel>
+                                    <TextBlock Foreground="White" IsVisible="{Binding !AcctSheetBusy}" Text="{Binding Loc.AcctInviteConfirm}" />
+                                    <TextBlock Foreground="White" IsVisible="{Binding AcctSheetBusy}" Text="{Binding Loc.AcctBusy}" />
+                                </Panel>
+                            </Button>
+                            <Button Classes="term-primary" Command="{Binding AcctTopupCmd}" Content="{Binding Loc.AcctTopUp}">
+                                <Button.IsVisible>
+                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                        <Binding Path="AcctSheetNoFunds" />
+                                        <Binding Path="HasTopup" />
+                                    </MultiBinding>
+                                </Button.IsVisible>
+                            </Button>
+                            <Button Classes="term-danger" Command="{Binding AcctSheetOkCmd}" IsEnabled="{Binding !AcctSheetBusy}" IsVisible="{Binding AcctSheetRotate}">
+                                <Panel>
+                                    <TextBlock Foreground="White" IsVisible="{Binding !AcctSheetBusy}" Text="{Binding Loc.AcctRotateButton}" />
+                                    <TextBlock Foreground="White" IsVisible="{Binding AcctSheetBusy}" Text="{Binding Loc.AcctBusy}" />
+                                </Panel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
         </Panel>
 

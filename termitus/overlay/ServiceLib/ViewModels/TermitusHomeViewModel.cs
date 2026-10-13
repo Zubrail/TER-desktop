@@ -345,12 +345,23 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         InitReport();
         InitUpdate();
         InitTun();
+        InitAccount2();
         // 0.5: «Продлить» opens the in-app pay sheet (plans + methods + offer). When the backend has no
         // payment API yet, the sheet itself says "оплата пока в Telegram-боте" with the bot button.
         RenewCmd = PayOpenCmd;
-        RefreshAccountCmd = ReactiveCommand.CreateFromTask(() => Bg(() => RefreshAccountAsync(manual: true)));
+        RefreshAccountCmd = ReactiveCommand.CreateFromTask(() => Bg(async () =>
+        {
+            var acct2 = Acct2LoadAsync(force: true); // Account 2.0 blocks: only when the page opens and here, never on a timer
+            await RefreshAccountAsync(manual: true);
+            await acct2;
+        }));
         // «Повторить» after "no connection": not throttled like «Обновить» (one request in flight at most).
-        RetryAccountCmd = ReactiveCommand.CreateFromTask(() => Bg(() => RefreshAccountAsync(manual: true, retry: true)));
+        RetryAccountCmd = ReactiveCommand.CreateFromTask(() => Bg(async () =>
+        {
+            var acct2 = Acct2LoadAsync(force: true);
+            await RefreshAccountAsync(manual: true, retry: true);
+            await acct2;
+        }));
         RetrySupportCmd = ReactiveCommand.CreateFromTask(() => Bg(() => SupportOnOpenAsync(retry: true)));
         SignInCmd = ReactiveCommand.CreateFromTask(async () =>
         {
@@ -364,6 +375,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         });
         LogoutCancelCmd = ReactiveCommand.CreateFromTask(() =>
         {
+            _reloginAfterLogout = false;
             ShowLogoutConfirm = false;
             return Task.CompletedTask;
         });
@@ -1373,6 +1385,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
     /// </summary>
     private async Task AccountOnOpenAsync()
     {
+        _ = Acct2LoadAsync(); // devices / friends / payments (Account 2.0), in parallel with the status refresh
         await RenderAccountAsync();
         var fetched = TermitusAccount.LoadCache()?.LastFetchedAt;
         var stale = fetched is not { } f || DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeSeconds(f) > AccountStaleAfter;
@@ -1616,6 +1629,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             _loginUnavailable = false;
             _renewUrl = null;
             _topupUrl = null;
+            Acct2Reset();
             Logging.SaveLog($"{_tag}: logged out ({subs.Count} subscription(s) removed)");
 
             // 4) Upstream lists (advanced UI) + our screens.
@@ -1637,6 +1651,12 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             OnUi(() => Locations.Clear());
             PublishSupport();
             await RefreshStateAsync();
+            if (_reloginAfterLogout)
+            {
+                // «Войти заново» (this device is not a manager): straight on to the Telegram sign-in.
+                _reloginAfterLogout = false;
+                _ = Bg(LoginWithTelegramAsync);
+            }
         }
         catch (Exception ex)
         {
@@ -1645,6 +1665,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         }
         finally
         {
+            _reloginAfterLogout = false;
             _loggingOut = false;
             OnUi(() =>
             {

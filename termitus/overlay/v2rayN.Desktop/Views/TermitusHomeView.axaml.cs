@@ -7,6 +7,7 @@ using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using v2rayN.Desktop.Common;
 
@@ -55,7 +56,7 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
                      (pageHome, "home"), (pagePicker, "servers"), (pageSettings, "settings"),
                      (pageAccount, "account"), (pageSupport, "support"),
                      (firstRun, "first-run"), (frChoice, "fr-choice"), (frWaiting, "fr-waiting"), (frLink, "fr-link"),
-                     (logoutSheet, "logout-sheet"), (paySheet, "pay-sheet"),
+                     (logoutSheet, "logout-sheet"), (paySheet, "pay-sheet"), (acctSheet, "acct-sheet"),
                      (pageCheck, "check"), (reportSheet, "report-sheet"), (updateSheet, "update-sheet"),
                  })
         {
@@ -78,6 +79,17 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
             {
                 // Like macOS sheets for destructive actions: the safe button has the focus.
                 Dispatcher.UIThread.Post(() => btnLogoutCancel.Focus(), DispatcherPriority.Input);
+            }
+        };
+        acctSheet.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && e.NewValue is true && _vm is { AcctSheetRename: true })
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    txtAcctRename.Focus();
+                    txtAcctRename.SelectAll();
+                }, DispatcherPriority.Input);
             }
         };
         tunPasswordSheet.PropertyChanged += (_, e) =>
@@ -248,6 +260,36 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
                         Logging.SaveLog($"TER: copy failed ({ex.GetType().Name})");
                     }
                 });
+            // Account 2.0: link / invite link copy, QR of the one-time join link (PNG from the local QR library).
+            _vm.AcctCopyRequested.AsObservable()
+                .ObserveOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(async text =>
+                {
+                    try
+                    {
+                        await AvaUtils.SetClipboardData(this, text);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.SaveLog($"TER: copy failed ({ex.GetType().Name})");
+                    }
+                });
+            _vm.WhenAnyValue(x => x.AcctQrPng)
+                .ObserveOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(png =>
+                {
+                    try
+                    {
+                        var old = acctQr.Source as IDisposable;
+                        acctQr.Source = png == null ? null : new Bitmap(new MemoryStream(png));
+                        old?.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        acctQr.Source = null;
+                        Logging.SaveLog($"TER: QR image failed ({ex.GetType().Name})");
+                    }
+                });
             _vm.QuitForUpdateRequested.AsObservable()
                 .ObserveOn(RxSchedulers.MainThreadScheduler)
                 .Subscribe(_ => TermitusTray.QuitApp());
@@ -274,7 +316,14 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
     /// <summary>Test tour only: scrolls a page's ScrollViewer to the end (settings | support | check).</summary>
     public void DebugScrollEnd(string page)
     {
-        (page switch { "settings" => pageSettings, "support" => pageSupport, "check" => pageCheck, _ => pageSettings }).ScrollToEnd();
+        (page switch { "settings" => pageSettings, "support" => pageSupport, "check" => pageCheck, "account" => pageAccount, _ => pageSettings }).ScrollToEnd();
+    }
+
+    /// <summary>Test tour only: scrolls the account page by a fraction (0 = top, 1 = bottom) of its scrollable height.</summary>
+    public void DebugScrollAccount(double fraction)
+    {
+        var max = Math.Max(0, pageAccount.Extent.Height - pageAccount.Viewport.Height);
+        pageAccount.Offset = new Vector(0, max * Math.Clamp(fraction, 0, 1));
     }
 
     /// <summary>Test tour only: opens the «Что именно будет отправлено» expander of the report sheet.</summary>
@@ -304,6 +353,12 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
         {
             e.Handled = true;
             _vm.TunPasswordSkipCmd.Execute().Subscribe(_ => { }, _ => { });
+            return;
+        }
+        if (e.Key == Key.Escape && _vm is { AcctShowSheet: true, AcctSheetBusy: false })
+        {
+            e.Handled = true;
+            _vm.AcctSheetCloseCmd.Execute().Subscribe(_ => { }, _ => { });
             return;
         }
         if (e.Key == Key.Escape && _vm is { ShowLogoutConfirm: true, IsLoggingOut: false })

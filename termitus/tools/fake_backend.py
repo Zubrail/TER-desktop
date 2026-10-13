@@ -7,14 +7,18 @@ Serves on 127.0.0.1:PORT (default 18080), sub token TESTTOKEN:
   POST .../pay                       {payment_id, pay_url}
   .../pay/<id>                       pending x PENDING_POLLS (default 3) then PAY_RESULT (paid|failed|expired)
   .../support                        chat: GET returns what was POSTed, POST stores it (and appends to $POST_LOG as JSON lines)
+  .../account/devices, devices/<id> (PATCH name, DELETE), devices/<id>/manage, devices/invite, referrals (GET/PATCH),
+                                     payments, rotate-link -- Account 2.0 (0.6.3), stateful in memory
   /app/latest.json, /app/<file>      update manifest + binaries from $APP_DIR (0.6; no folder = 404)
 Run: python3 termitus/tools/fake_backend.py [port]
 Env: PLANS=404|500, PENDING_POLLS=3, PAY_RESULT=paid|failed|expired, EXPIRED=1 (subscription ended 2 days ago),
      EXPIRES_IN_DAYS=20, SHUTDOWN_AFTER=SECONDS (server vanishes: offline checks)
      SUPPORT_POST=403|404|422|429|500 (every support POST answers with it), SUPPORT_FAIL_FIRST=1 (first POST 503, then ok),
+     ACCOUNT_GUEST=1 (every /account/ call answers 403 = this device is not a manager), INVITE_FREE=1 (invite without a payment step),
+     INVITE_BALANCE=150 (balance for the paid-device check; below 50 -> invite answers 402), ACCOUNT_EMPTY=1 (no payments, no referrals yet), ACCOUNT_MANY=1 (14 payments),
      POST_LOG=/path (support POST bodies), REQ_LOG=/path (GET /app/* requests: path, User-Agent, header names), APP_DIR=/path (serves latest.json + files under /app/), WITH_H2=0 (no Hysteria2 entries)
 """
-import base64, json, os, sys, threading, time
+import base64, datetime, json, os, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 18080
@@ -38,6 +42,80 @@ def sub_body():
 chat = []
 posts = {"n": 0}
 
+def iso_ago(**kw):
+    return (datetime.datetime.utcnow() - datetime.timedelta(**kw)).replace(microsecond=0).isoformat()  # naive UTC, like the backend
+
+acct = {
+    "devices": [
+        {"id": 1, "name": "MacBook Pro", "platform": "macos", "last_seen": iso_ago(seconds=20), "is_this_device": True, "can_manage": True, "paid_slot": False, "is_active": True},
+        {"id": 2, "name": "iPhone Лены", "platform": "ios", "last_seen": iso_ago(hours=2), "is_this_device": False, "can_manage": False, "paid_slot": False, "is_active": True},
+        {"id": 3, "name": "Pixel 8", "platform": "android", "last_seen": iso_ago(days=3), "is_this_device": False, "can_manage": False, "paid_slot": True, "is_active": True},
+    ],
+    "reward": "money",
+    "invites": 0,
+}
+ACCOUNT_PAYMENTS = [
+    {"date": iso_ago(days=2), "amount": 199.0, "currency": "RUB", "provider": "Карта / СБП", "kind": "purchase", "plan_days": 30, "status": "paid"},
+    {"date": iso_ago(days=9), "amount": 300.0, "currency": "RUB", "provider": "CryptoBot", "kind": "topup", "plan_days": 0, "status": "paid"},
+    {"date": iso_ago(days=33), "amount": 50.0, "currency": "RUB", "provider": "С баланса", "kind": "device", "plan_days": 0, "status": "paid"},
+    {"date": iso_ago(days=34), "amount": 199.0, "currency": "RUB", "provider": "Карта / СБП", "kind": "purchase", "plan_days": 30, "status": "expired"},
+    {"date": iso_ago(days=64), "amount": 1590.0, "currency": "RUB", "provider": "Криптовалюта", "kind": "purchase", "plan_days": 365, "status": "paid"},
+]
+
+def account(handler, method, p, raw):
+    """Account 2.0 endpoints under /subscription/TESTTOKEN/account/. Returns True when handled."""
+    pre = f"/subscription/{TOK}/account/"
+    if not p.startswith(pre):
+        return False
+    rest = p[len(pre):].strip("/").split("/")
+    if os.environ.get("ACCOUNT_GUEST") == "1":
+        handler.send(403, json.dumps({"detail": "Управлять подпиской может только её владелец"})); return True
+    body = json.loads(raw or b"{}") if raw else {}
+    devs = acct["devices"]
+    if rest == ["devices"] and method == "GET":
+        handler.send(200, json.dumps({"devices": devs})); return True
+    if rest == ["devices", "invite"] and method == "POST":
+        balance = float(os.environ.get("INVITE_BALANCE", "150"))
+        cost = 0 if os.environ.get("INVITE_FREE") == "1" or len(devs) < 3 else 50
+        if cost and not body.get("confirm_pay"):
+            handler.send(200, json.dumps({"needs_payment": True, "price_rub": cost, "free_limit": 3, "devices": len(devs), "balance_rub": balance})); return True
+        if cost and balance < cost:
+            handler.send(402, json.dumps({"detail": "Не хватает баланса на доплату за устройство — пополните баланс.", "price_rub": cost, "balance_rub": balance})); return True
+        acct["invites"] += 1
+        exp = (datetime.datetime.utcnow() + datetime.timedelta(minutes=10)).replace(microsecond=0).isoformat()
+        handler.send(200, json.dumps({"join_url": f"https://termitus.online/app/join/FAKE{acct['invites']:04d}ABCDEFGH", "expires_at": exp, "price_rub": cost})); return True
+    if len(rest) >= 2 and rest[0] == "devices" and rest[1].isdigit():
+        d = next((x for x in devs if x["id"] == int(rest[1])), None)
+        if d is None:
+            handler.send(404, json.dumps({"detail": "Not found"})); return True
+        if len(rest) == 2 and method == "PATCH":
+            d["name"] = (body.get("name") or d["name"])[:100]; handler.send(200, json.dumps({"id": d["id"], "name": d["name"]})); return True
+        if len(rest) == 2 and method == "DELETE":
+            if d["is_this_device"] and len([x for x in devs if x["can_manage"]]) <= 1:
+                handler.send(409, json.dumps({"detail": "Это единственное устройство с управлением подпиской — его можно удалить только через бота."})); return True
+            devs.remove(d); handler.send(200, json.dumps({"status": "removed", "id": d["id"]})); return True
+        if len(rest) == 3 and rest[2] == "manage" and method == "POST":
+            if not body.get("on") and d["is_this_device"]:
+                handler.send(409, json.dumps({"detail": "Нельзя забрать управление у устройства, с которого вы работаете."})); return True
+            d["can_manage"] = bool(body.get("on")); handler.send(200, json.dumps({"id": d["id"], "can_manage": d["can_manage"]})); return True
+    if rest == ["referrals"] and method == "GET":
+        empty = os.environ.get("ACCOUNT_EMPTY") == "1"
+        handler.send(200, json.dumps({"link": "https://t.me/TErpiUsis_bot?start=ref_123456789", "site_link": "https://termitus.online/?ref=123456789",
+            "invited_count": 0 if empty else 4, "bonus_rub": 0 if empty else 238.5, "bonus_days": 0 if empty else 8, "reward": acct["reward"],
+            "bonus_percent": 15, "bonus_days_per_payment": 4})); return True
+    if rest == ["referrals"] and method == "PATCH":
+        if body.get("reward") not in ("money", "days"):
+            handler.send(422, json.dumps({"detail": "bad reward"})); return True
+        acct["reward"] = body["reward"]; handler.send(200, json.dumps({"reward": acct["reward"]})); return True
+    if rest == ["payments"] and method == "GET":
+        pays = [] if os.environ.get("ACCOUNT_EMPTY") == "1" else ACCOUNT_PAYMENTS
+        if os.environ.get("ACCOUNT_MANY") == "1":  # 14 rows: the «Показать все» expander
+            pays = [dict(ACCOUNT_PAYMENTS[i % 5], date=iso_ago(days=2 + 7 * i)) for i in range(14)]
+        handler.send(200, json.dumps({"payments": pays})); return True
+    if rest == ["rotate-link"] and method == "POST":
+        handler.send(200, json.dumps({"status": "rotated", "subscription_url": "https://termitus.online/subscription/FAKEROTATEDUUID"})); return True
+    handler.send(404, "{}"); return True
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def send(self, code, body="", ctype="application/json", headers=None):
@@ -48,6 +126,7 @@ class H(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(b)
     def do_GET(self):
         p = self.path.split("?")[0]
+        if account(self, "GET", p, None): return
         if p.startswith("/app/") and os.environ.get("REQ_LOG"):
             with open(os.environ["REQ_LOG"], "a") as f:
                 f.write(f"GET {self.path} UA={self.headers.get('User-Agent')} headers={sorted(k for k in self.headers.keys())}\n")
@@ -60,7 +139,7 @@ class H(BaseHTTPRequestHandler):
         if p == base + "/info":
             return self.send(200, json.dumps({"expire": int(time.time()) + DAYS * 86400, "plan": "Месяц", "devices_used": 1, "devices_allowed": 3,
                 "devices": [{"name": "MacBook", "platform": "macOS", "is_active": True}], "balance": 150,
-                "renew_url": "https://t.me/TErpiUsis_bot", "telegram": {"username": "tester", "first_name": "Тест"}}))
+                "renew_url": "https://t.me/TErpiUsis_bot", "topup_url": "https://termitus.online/topup", "telegram": {"username": "tester", "first_name": "Тест"}}))
         if p == base + "/plans":
             if os.environ.get("PLANS") in ("404", "500"): return self.send(int(os.environ["PLANS"]), "{}")
             return self.send(200, json.dumps({"plans": [
@@ -86,6 +165,7 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         p = self.path.split("?")[0]
         n = int(self.headers.get("Content-Length") or 0); raw = self.rfile.read(n)
+        if account(self, "POST", p, raw): return
         if p == f"/subscription/{TOK}/support":
             posts["n"] += 1
             forced = os.environ.get("SUPPORT_POST")
@@ -100,6 +180,14 @@ class H(BaseHTTPRequestHandler):
         if p == f"/subscription/{TOK}/pay":
             return self.send(201, json.dumps({"payment_id": f"pay{int(time.time())}", "pay_url": "https://termitus.online/pay/test"}))
         self.send(404, "{}")
+
+    def do_PATCH(self):
+        p = self.path.split("?")[0]
+        n = int(self.headers.get("Content-Length") or 0); raw = self.rfile.read(n)
+        if not account(self, "PATCH", p, raw): self.send(404, "{}")
+    def do_DELETE(self):
+        p = self.path.split("?")[0]
+        if not account(self, "DELETE", p, None): self.send(404, "{}")
 
 if os.environ.get("SHUTDOWN_AFTER"):
     threading.Timer(float(os.environ["SHUTDOWN_AFTER"]), lambda: os._exit(0)).start()
