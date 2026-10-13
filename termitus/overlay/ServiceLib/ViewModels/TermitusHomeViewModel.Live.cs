@@ -255,14 +255,15 @@ public partial class TermitusHomeViewModel
     }
 
     /// <summary>Test-tour only: shows the connected look with sample numbers (no real tunnel).</summary>
-    public void DebugFakeConnected()
+    public void DebugFakeConnected(bool idle = false)
     {
         _connected = true;
         _connectedAt = DateTime.Now.AddMinutes(-12);
         var rnd = new Random(7);
         for (var i = 0; i < TermitusSpeedHistory.Capacity; i++)
         {
-            _speed.Add((long)(300_000 + 1_800_000 * Math.Abs(Math.Sin(i / 6.0)) + rnd.Next(0, 200_000)), rnd.Next(20_000, 260_000));
+            _speed.Add(idle ? rnd.Next(0, 8) : (long)(300_000 + 1_800_000 * Math.Abs(Math.Sin(i / 6.0)) + rnd.Next(0, 200_000)),
+                idle ? rnd.Next(0, 4) : rnd.Next(20_000, 260_000));
         }
         var (d, u) = _speed.Snapshot();
         var (area, line) = TermitusLive.GraphPaths(d, u);

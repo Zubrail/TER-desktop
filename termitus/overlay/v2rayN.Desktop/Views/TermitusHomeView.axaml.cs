@@ -80,6 +80,13 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
                 Dispatcher.UIThread.Post(() => btnLogoutCancel.Focus(), DispatcherPriority.Input);
             }
         };
+        tunPasswordSheet.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && e.NewValue is true)
+            {
+                Dispatcher.UIThread.Post(() => txtTunPassword.Focus(), DispatcherPriority.Input);
+            }
+        };
         DataContextChanged += (_, _) => HookVm(DataContext as TermitusHomeViewModel);
         AttachedToVisualTree += (_, _) =>
         {
@@ -291,6 +298,12 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
         {
             e.Handled = true;
             _vm.UpdateCloseCmd.Execute().Subscribe(_ => { }, _ => { });
+            return;
+        }
+        if (e.Key == Key.Escape && _vm is { ShowTunPassword: true, TunPasswordChecking: false })
+        {
+            e.Handled = true;
+            _vm.TunPasswordSkipCmd.Execute().Subscribe(_ => { }, _ => { });
             return;
         }
         if (e.Key == Key.Escape && _vm is { ShowLogoutConfirm: true, IsLoggingOut: false })

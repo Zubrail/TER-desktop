@@ -87,7 +87,13 @@ public static class TermitusLive
         double X(int i) => n <= 1 ? 0 : width * i / (n - 1);
         double Y(long v) => height - 2 - (height - 6) * Math.Min(1.0, (double)v / max);
 
-        var area = new System.Text.StringBuilder();
+        // 0.6.2: both paths start with a zero-length anchor at the top-left corner. The view
+        // draws them with Stretch="Fill", which scales the geometry's OWN bounds to the box:
+        // without the anchor an idle graph (all samples ~0, a 2 px sliver at the bottom) was
+        // blown up into a solid orange rectangle (owner's screenshot, 0.6.0). With it the
+        // bounds always span the full 0..height, so Fill only scales the width.
+        const string anchor = "M0,0 L0,0 ";
+        var area = new System.Text.StringBuilder(anchor);
         area.Append(CultureInfo.InvariantCulture, $"M0,{height.ToString("0.#", inv)} ");
         for (var i = 0; i < n; i++)
         {
@@ -95,7 +101,7 @@ public static class TermitusLive
         }
         area.Append(CultureInfo.InvariantCulture, $"L{width.ToString("0.#", inv)},{height.ToString("0.#", inv)} Z");
 
-        var line = new System.Text.StringBuilder();
+        var line = new System.Text.StringBuilder(anchor);
         for (var i = 0; i < n; i++)
         {
             line.Append(CultureInfo.InvariantCulture, $"{(i == 0 ? "M" : "L")}{X(i).ToString("0.#", inv)},{Y(up[i]).ToString("0.#", inv)} ");

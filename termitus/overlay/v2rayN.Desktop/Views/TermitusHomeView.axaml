@@ -77,7 +77,9 @@
         <Style Selector="Path.term-ring">
             <Setter Property="Width" Value="246" />
             <Setter Property="Height" Value="246" />
-            <Setter Property="Stretch" Value="Uniform" />
+            <!-- 0.6.2: None, not Uniform: Uniform blew the quarter arc up to the whole
+                 246 box, so it spun as a huge arc across the screen (owner's screenshot). -->
+            <Setter Property="Stretch" Value="None" />
             <Setter Property="StrokeThickness" Value="4" />
             <Setter Property="StrokeLineCap" Value="Round" />
             <Setter Property="Stroke" Value="{DynamicResource TermAccentBrush}" />
@@ -1966,13 +1968,63 @@
                         <SelectableTextBlock FontSize="14" LineHeight="20" Foreground="{DynamicResource TermText}" Text="{Binding UpdateNotes}" TextWrapping="Wrap" />
                     </ScrollViewer>
                     <TextBlock Margin="0,14,0,0" Classes="term-hint" Text="{Binding UpdateStatusText}" TextWrapping="Wrap" />
-                    <ProgressBar Margin="0,10,0,0" IsIndeterminate="{Binding !UpdateProgressKnown}" IsVisible="{Binding UpdateBusyStage}" Maximum="100" Value="{Binding UpdateProgress}" />
+                    <ProgressBar Margin="0,10,0,0" Foreground="{DynamicResource TermAccentBrush}" IsIndeterminate="{Binding !UpdateProgressKnown}" IsVisible="{Binding UpdateBusyStage}" Maximum="100" Value="{Binding UpdateProgress}" />
                     <StackPanel Margin="0,20,0,0" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
                         <Button Classes="term-secondary" Command="{Binding UpdateLaterCmd}" Content="{Binding Loc.UpdateLater}" IsVisible="{Binding UpdateAvailableStage}" />
                         <Button Classes="term-primary" Command="{Binding UpdateNowCmd}" Content="{Binding Loc.UpdateNow}" IsVisible="{Binding UpdateAvailableStage}" />
                         <Button Classes="term-primary" Command="{Binding UpdateNowCmd}" Content="{Binding Loc.UpdateRetry}" IsVisible="{Binding UpdateFailedStage}" />
                         <Button Classes="term-secondary" Command="{Binding UpdateRevealCmd}" Content="{Binding Loc.UpdateDetails}" IsVisible="{Binding UpdateManualStage}" />
                         <Button Classes="term-secondary" Command="{Binding UpdateCloseCmd}" Content="{Binding Loc.Close}" IsVisible="{Binding !UpdateBusyStage}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Panel>
+
+        <!-- 0.6.2: TER's own admin-password sheet for «Защищать весь трафик» (TermitusHomeViewModel.Tun.cs) -->
+        <Panel
+            x:Name="tunPasswordSheet"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Background="#59000000"
+            IsVisible="{Binding ShowTunPassword}">
+            <Border
+                Width="440"
+                Padding="26,24,26,20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{DynamicResource TermSurface}"
+                BoxShadow="0 2 6 0 #1F000000, 0 18 48 0 #33000000"
+                CornerRadius="20">
+                <StackPanel Spacing="0">
+                    <TextBlock FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.TunPwdTitle}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,10,0,0" FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Loc.TunPwdBody}" TextWrapping="Wrap" />
+                    <TextBox
+                        x:Name="txtTunPassword"
+                        Margin="0,16,0,0"
+                        PasswordChar="●"
+                        Watermark="{Binding Loc.TunPwdPlaceholder}"
+                        IsEnabled="{Binding !TunPasswordChecking}"
+                        Text="{Binding TunPasswordText, Mode=TwoWay}" />
+                    <TextBlock
+                        Margin="0,8,0,0"
+                        FontSize="13"
+                        Foreground="{DynamicResource TermErr}"
+                        IsVisible="{Binding TunPasswordError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                        Text="{Binding TunPasswordError}"
+                        TextWrapping="Wrap" />
+                    <TextBlock Margin="0,10,0,0" FontSize="13" LineHeight="18" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.TunPwdNote}" TextWrapping="Wrap" />
+                    <StackPanel Margin="0,22,0,0" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
+                        <Button
+                            Classes="term-secondary"
+                            Command="{Binding TunPasswordSkipCmd}"
+                            Content="{Binding Loc.TunPwdSkip}"
+                            IsEnabled="{Binding !TunPasswordChecking}" />
+                        <Button Classes="term-primary" Command="{Binding TunPasswordOkCmd}" IsDefault="True" IsEnabled="{Binding !TunPasswordChecking}">
+                            <Panel>
+                                <TextBlock Foreground="White" IsVisible="{Binding !TunPasswordChecking}" Text="{Binding Loc.TunPwdOk}" />
+                                <TextBlock Foreground="White" IsVisible="{Binding TunPasswordChecking}" Text="{Binding Loc.TunPwdChecking}" />
+                            </Panel>
+                        </Button>
                     </StackPanel>
                 </StackPanel>
             </Border>

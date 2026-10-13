@@ -344,6 +344,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         InitCheck();
         InitReport();
         InitUpdate();
+        InitTun();
         // 0.5: «Продлить» opens the in-app pay sheet (plans + methods + offer). When the backend has no
         // payment API yet, the sheet itself says "оплата пока в Telegram-боте" with the bot button.
         RenewCmd = PayOpenCmd;
@@ -398,11 +399,25 @@ public partial class TermitusHomeViewModel : MyReactiveObject
                 TermitusSettings.AllTraffic = v;
                 return Task.CompletedTask;
             });
-            // Connected: apply now (upstream asks for the admin password itself);
-            // otherwise the next Connect does it (EnsureTunAsync).
-            if ((_connected || !v) && _main.StatusBarViewModel.EnableTun != v)
+            if (!v)
             {
-                _main.StatusBarViewModel.EnableTun = v;
+                if (_main.StatusBarViewModel.EnableTun)
+                {
+                    _main.StatusBarViewModel.EnableTun = false; // no password needed to turn it off
+                }
+                return;
+            }
+            // On while connected: TER's own password sheet now (upstream's dialog is not
+            // available in the simple UI); otherwise the next Connect does it.
+            if (_connected)
+            {
+                _ = Bg(async () =>
+                {
+                    if (!await EnsureTunAsync())
+                    {
+                        OnUi(() => SubStatusText = Loc.TunSkipped);
+                    }
+                });
             }
         });
         this.WhenAnyValue(x => x.KillSwitch).Skip(1).Subscribe(v =>
@@ -648,54 +663,6 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         {
             OnUi(() => SubStatusText = Loc.TunSkipped);
         }
-    }
-
-    /// <summary>
-    /// 0.6.1: «Защищать весь трафик» (TermitusSettings.AllTraffic, default on) brings TUN up
-    /// on Connect. On macOS upstream keeps the admin password in memory only and turns TUN
-    /// off at every launch, so the first Connect of a run shows upstream's password sheet.
-    /// Returns false when the user wanted TUN but it did not come up (sheet cancelled or
-    /// left open for 3 min) -- Connect then goes on via the system proxy and says so.
-    /// Never on a test instance (TUN is forced off there) and not on Windows yet
-    /// (upstream would restart the app as administrator).
-    /// </summary>
-    private async Task<bool> EnsureTunAsync()
-    {
-        if (!TermitusSettings.AllTraffic || TermitusTestHooks.IsTestInstance || !Utils.IsMacOS()
-            || _config.TunModeItem?.EnableTun == true)
-        {
-            return true;
-        }
-        OnUi(() =>
-        {
-            SubStatusText = Loc.TunAsking;
-            _main.StatusBarViewModel.EnableTun = true; // shows the password sheet when needed
-        });
-        var until = DateTime.Now.AddMinutes(3);
-        await Task.Delay(500);
-        while (DateTime.Now < until)
-        {
-            if (AppManager.Instance.LinuxSudoPwd.IsNotEmpty() && _config.TunModeItem?.EnableTun == true)
-            {
-                OnUi(() => SubStatusText = string.Empty);
-                return true;
-            }
-            if (!_main.StatusBarViewModel.EnableTun)
-            {
-                break; // Cancel: upstream unticks it
-            }
-            await Task.Delay(300);
-        }
-        Logging.SaveLog($"{_tag}: all-traffic mode wanted, admin password not given -- system proxy only");
-        TermitusErrorLog.Add("пароль администратора не введён — защищены только браузеры");
-        OnUi(() =>
-        {
-            if (_main.StatusBarViewModel.EnableTun)
-            {
-                _main.StatusBarViewModel.EnableTun = false;
-            }
-        });
-        return false;
     }
 
     private async Task DisconnectAsync()

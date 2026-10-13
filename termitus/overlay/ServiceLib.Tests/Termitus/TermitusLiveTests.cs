@@ -39,9 +39,10 @@ public class TermitusLiveTests
     {
         var zeros = new long[60];
         var (area, line) = TermitusLive.GraphPaths(zeros, zeros);
-        await Assert.That(area.StartsWith("M0,44 L0,42")).IsTrue();
+        // top-left anchor first (keeps Stretch="Fill" from blowing an idle graph up to a box)
+        await Assert.That(area.StartsWith("M0,0 L0,0 M0,44 L0,42")).IsTrue();
         await Assert.That(area.EndsWith("L360,44 Z")).IsTrue();
-        await Assert.That(line.StartsWith("M0,42")).IsTrue();
+        await Assert.That(line.StartsWith("M0,0 L0,0 M0,42")).IsTrue();
         var busy = Enumerable.Range(0, 60).Select(i => i * 100_000L).ToArray();
         var (a2, _) = TermitusLive.GraphPaths(busy, zeros);
         // the highest sample sits near the top (y = 4), never above the box
