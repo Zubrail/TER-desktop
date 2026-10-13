@@ -20,6 +20,13 @@
             <SolidColorBrush x:Key="TermWarn" Color="#FBBF24" />
             <SolidColorBrush x:Key="TermErr" Color="#F87171" />
             <SolidColorBrush x:Key="TermPingGood" Color="#4ADE80" />
+            <!-- 0.6.1: switches in TER orange (Semi defaults were green / near-invisible when off) -->
+            <SolidColorBrush x:Key="ToggleSwitchContainerCheckedDefaultBackground" Color="#FF8A3D" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerCheckedPointeroverBackground" Color="#FF7A45" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerCheckedPressedBackground" Color="#F06A35" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerUnCheckedDefaultBackground" Color="#3A3A41" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerUnCheckedPointeroverBackground" Color="#46464E" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerUnCheckedPressedBackground" Color="#46464E" />
             <LinearGradientBrush x:Key="TermAccentBrush" StartPoint="0%,0%" EndPoint="100%,100%">
                 <GradientStop Offset="0" Color="#FFB547" />
                 <GradientStop Offset="1" Color="#FF7A45" />
@@ -41,6 +48,13 @@
             <SolidColorBrush x:Key="TermWarn" Color="#FBBF24" />
             <SolidColorBrush x:Key="TermErr" Color="#F87171" />
             <SolidColorBrush x:Key="TermPingGood" Color="#4ADE80" />
+            <!-- 0.6.1: switches in TER orange (Semi defaults were green / near-invisible when off) -->
+            <SolidColorBrush x:Key="ToggleSwitchContainerCheckedDefaultBackground" Color="#FF8A3D" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerCheckedPointeroverBackground" Color="#FF7A45" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerCheckedPressedBackground" Color="#F06A35" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerUnCheckedDefaultBackground" Color="#3A3A41" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerUnCheckedPointeroverBackground" Color="#46464E" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerUnCheckedPressedBackground" Color="#46464E" />
             <LinearGradientBrush x:Key="TermAccentBrush" StartPoint="0%,0%" EndPoint="100%,100%">
                 <GradientStop Offset="0" Color="#FFB547" />
                 <GradientStop Offset="1" Color="#FF7A45" />
@@ -63,6 +77,13 @@
             <SolidColorBrush x:Key="TermWarn" Color="#B7791F" />
             <SolidColorBrush x:Key="TermErr" Color="#DC2626" />
             <SolidColorBrush x:Key="TermPingGood" Color="#059669" />
+            <!-- 0.6.1: switches in TER orange (Semi defaults were green / near-invisible when off) -->
+            <SolidColorBrush x:Key="ToggleSwitchContainerCheckedDefaultBackground" Color="#FF8A3D" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerCheckedPointeroverBackground" Color="#FF7A45" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerCheckedPressedBackground" Color="#F06A35" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerUnCheckedDefaultBackground" Color="#D3D3DA" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerUnCheckedPointeroverBackground" Color="#C6C6CE" />
+            <SolidColorBrush x:Key="ToggleSwitchContainerUnCheckedPressedBackground" Color="#C6C6CE" />
             <LinearGradientBrush x:Key="TermAccentBrush" StartPoint="0%,0%" EndPoint="100%,100%">
                 <GradientStop Offset="0" Color="#FFB547" />
                 <GradientStop Offset="1" Color="#FF7A45" />

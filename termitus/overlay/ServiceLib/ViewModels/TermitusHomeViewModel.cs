@@ -389,9 +389,20 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         this.WhenAnyValue(x => x.AutoRun).Skip(1).Subscribe(v => _ = Bg(() => SetAutoRunAsync(v)));
         this.WhenAnyValue(x => x.AllTraffic).Skip(1).Subscribe(v =>
         {
-            if (!_settingsLoading && _main.StatusBarViewModel.EnableTun != v)
+            if (_settingsLoading)
             {
-                _main.StatusBarViewModel.EnableTun = v; // upstream asks for the admin password itself
+                return;
+            }
+            _ = Bg(() =>
+            {
+                TermitusSettings.AllTraffic = v;
+                return Task.CompletedTask;
+            });
+            // Connected: apply now (upstream asks for the admin password itself);
+            // otherwise the next Connect does it (EnsureTunAsync).
+            if ((_connected || !v) && _main.StatusBarViewModel.EnableTun != v)
+            {
+                _main.StatusBarViewModel.EnableTun = v;
             }
         });
         this.WhenAnyValue(x => x.KillSwitch).Skip(1).Subscribe(v =>
@@ -616,6 +627,8 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             }
         }
 
+        var tunSkipped = !await EnsureTunAsync();
+
         // System proxy (no admin rights needed). If the user switched TUN on in
         // the advanced UI (with its sudo prompt), Reload() brings TUN up instead.
         // Kill switch: the system proxy is set in TUN mode too, so proxy-aware apps
@@ -631,6 +644,58 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         OnUi(() => IsConnecting = false);
         SetBusy(false);
         await RefreshStateAsync();
+        if (tunSkipped)
+        {
+            OnUi(() => SubStatusText = Loc.TunSkipped);
+        }
+    }
+
+    /// <summary>
+    /// 0.6.1: «Защищать весь трафик» (TermitusSettings.AllTraffic, default on) brings TUN up
+    /// on Connect. On macOS upstream keeps the admin password in memory only and turns TUN
+    /// off at every launch, so the first Connect of a run shows upstream's password sheet.
+    /// Returns false when the user wanted TUN but it did not come up (sheet cancelled or
+    /// left open for 3 min) -- Connect then goes on via the system proxy and says so.
+    /// Never on a test instance (TUN is forced off there) and not on Windows yet
+    /// (upstream would restart the app as administrator).
+    /// </summary>
+    private async Task<bool> EnsureTunAsync()
+    {
+        if (!TermitusSettings.AllTraffic || TermitusTestHooks.IsTestInstance || !Utils.IsMacOS()
+            || _config.TunModeItem?.EnableTun == true)
+        {
+            return true;
+        }
+        OnUi(() =>
+        {
+            SubStatusText = Loc.TunAsking;
+            _main.StatusBarViewModel.EnableTun = true; // shows the password sheet when needed
+        });
+        var until = DateTime.Now.AddMinutes(3);
+        await Task.Delay(500);
+        while (DateTime.Now < until)
+        {
+            if (AppManager.Instance.LinuxSudoPwd.IsNotEmpty() && _config.TunModeItem?.EnableTun == true)
+            {
+                OnUi(() => SubStatusText = string.Empty);
+                return true;
+            }
+            if (!_main.StatusBarViewModel.EnableTun)
+            {
+                break; // Cancel: upstream unticks it
+            }
+            await Task.Delay(300);
+        }
+        Logging.SaveLog($"{_tag}: all-traffic mode wanted, admin password not given -- system proxy only");
+        TermitusErrorLog.Add("пароль администратора не введён — защищены только браузеры");
+        OnUi(() =>
+        {
+            if (_main.StatusBarViewModel.EnableTun)
+            {
+                _main.StatusBarViewModel.EnableTun = false;
+            }
+        });
+        return false;
     }
 
     private async Task DisconnectAsync()
@@ -1267,11 +1332,13 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         var routing = await ConfigHandler.GetDefaultRouting(_config);
         var name = routing?.Remarks ?? string.Empty;
         var killSwitch = TermitusSettings.KillSwitch; // file read: here, not on the UI thread
+        var allTraffic = TermitusSettings.AllTraffic;
         OnUi(() =>
         {
             _settingsLoading = true;
             AutoRun = _config.GuiItem.AutoRun;
-            AllTraffic = _config.TunModeItem?.EnableTun == true;
+            // 0.6.1: the user's lasting choice, not upstream's EnableTun (reset on every launch).
+            AllTraffic = allTraffic;
             KillSwitch = killSwitch;
             RouteExceptRu = name.EndsWith(TermitusRussiaPreset.DefaultRemarks, StringComparison.Ordinal) || name.Length == 0;
             RouteBlockedOnly = name.EndsWith("Заблокированное", StringComparison.Ordinal);
@@ -2301,7 +2368,7 @@ public sealed record TermitusKbItem(string Question, string Answer)
         new("Что значит «Российские сайты — напрямую»?",
             "Банки, Госуслуги, маркетплейсы и другие российские сайты открываются без VPN — так они не ругаются и работают быстрее. Всё остальное идёт через TER. Изменить можно в «Настройки» → «Какие сайты идут через TER»."),
         new("Telegram или игра не работают через TER",
-            "По умолчанию через TER идёт трафик браузера и программ, которые уважают системный прокси. Чтобы защитить вообще всё, включите «Защищать весь трафик компьютера» в «Настройках». macOS один раз спросит пароль администратора."),
+            "Проверьте «Настройки» → «Защищать весь трафик компьютера»: должно быть включено. Тогда при первом подключении после запуска TER Mac спросит пароль администратора — введите его. Если пароль не ввести, через TER пойдут только браузеры."),
         new("Что будет, если VPN оборвётся?",
             "TER следит за соединением сам: если оно оборвалось или вы сменили сеть (например, Wi-Fi на телефонную точку доступа), он переподключится и при необходимости выберет другую страну по тем же правилам, что и «Авто». Если переподключиться не удалось: при включённой опции «Блокировать интернет, если VPN оборвался» (Настройки → Безопасность) браузер и программы, работающие через системный прокси, остаются без интернета, пока VPN не вернётся, — на «Главной» будет красная надпись «Защита прервана». Когда опция выключена, TER вернёт обычный интернет и прямо напишет, что вы без защиты. Честное ограничение: программы, которые не слушают системный прокси, при аварии могут выйти в интернет напрямую — полностью закрыть это на macOS без системного расширения нельзя."),
         new("Не подключается или очень медленно",

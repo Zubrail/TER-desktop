@@ -177,6 +177,10 @@ public sealed partial class TermitusLocale
 
     // Connect button / status
     public string TapToConnect => S("Нажмите, чтобы подключиться", "Tap to connect");
+    // 0.6.1: «Защищать весь трафик» on Connect
+    public string TunAsking => S("Введите пароль Mac, чтобы через TER шли все программы", "Enter your Mac password so every app goes through TER");
+    public string TunSkipped => S("Пароль не введён — через TER идут только браузеры. Чтобы защитить всё: отключитесь и подключитесь снова.",
+        "No password — only browsers go through TER. To protect everything: disconnect and connect again.");
     public string Connecting => S("Подключаемся…", "Connecting…");
     public string Connected => S("Подключено", "Connected");
     public string Disconnected => S("Отключено", "Disconnected");
@@ -223,12 +227,12 @@ public sealed partial class TermitusLocale
     public string AutoRunHint => S("Приложение запустится само, когда вы включите компьютер.",
                                    "The app starts by itself when you turn on the computer.");
     public string AllTrafficTitle => S("Защищать весь трафик компьютера", "Protect all computer traffic");
-    public string AllTrafficHint => S("Через TER пойдут все программы, а не только браузер (игры, мессенджеры, Telegram). Компьютер один раз спросит пароль администратора.",
-                                      "Every app goes through TER, not only the browser (games, messengers). macOS asks for the admin password once.");
+    public string AllTrafficHint => S("Через TER идут все программы: браузер, Telegram, игры. При первом подключении после запуска TER Mac спросит пароль администратора. Выключено — через TER идут только браузеры.",
+        "Every app goes through TER: browser, Telegram, games. On the first Connect after TER starts, your Mac asks for the administrator password. Off — only browsers go through TER.");
     public string SettingsRouting => S("Какие сайты идут через TER", "Which sites go through TER");
     public string RouteExceptRuTitle => S("Всё, кроме российских сайтов", "Everything except Russian sites");
-    public string RouteExceptRuHint => S("Рекомендуем. Банки, Госуслуги и маркетплейсы открываются напрямую и не ругаются на VPN.",
-                                         "Recommended. Banks, Gosuslugi and marketplaces open directly and don't complain about VPN.");
+    public string RouteExceptRuHint => S("Банки, Госуслуги и маркетплейсы открываются напрямую и не ругаются на VPN.",
+                                         "Banks, Gosuslugi and marketplaces open directly and don't complain about VPN.");
     public string RouteBlockedTitle => S("Только заблокированные сайты", "Only blocked sites");
     public string RouteBlockedHint => S("Через TER идут только недоступные в России сайты. Остальное — как без VPN.",
                                         "Only sites unavailable in Russia go through TER. Everything else works as without VPN.");

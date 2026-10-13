@@ -139,8 +139,11 @@ public partial class TermitusHomeViewModel
             RebuildReportChips();
             SetReportStage(sub == null ? ReportStage.Bot : pending ? ReportStage.Offline : ReportStage.Editing);
             ShowReport = true;
+            // 0.6.1: inside the UI callback -- called after OnUi() it ran before
+            // ShowReport was set, bailed out, and a sheet opened with a preset
+            // chip (from «Проверка подключения») kept «Отправить» disabled.
+            RefreshReportPreview();
         });
-        RefreshReportPreview();
     }
 
     private void CloseReport()

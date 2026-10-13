@@ -218,6 +218,18 @@ if [ -f "$UPS" ] && ! grep -q "TER: app self-update disabled" "$UPS"; then
   note "UpdateService.cs: самообновление приложения с 2dust/v2rayN отключено"
 fi
 
+# TaskManager.cs: upstream's background "check update" task still polled GitHub
+# for new v2rayN/core releases and lit the «Доступно обновление» button in the
+# advanced window (seen live by the owner, 0.6.0) -- pressing it leads to the
+# stock v2rayN updater. TER updates only via its own signed channel (0.6.1).
+TM="$ROOT/ServiceLib/Manager/TaskManager.cs"
+if [ -f "$TM" ] && ! grep -q "TER: upstream update check disabled" "$TM"; then
+  backup "$TM"
+  perl -0777 -pi -e 's{(private async Task UpdateTaskRunCheckUpdate\(\)\n    \{\n)}{$1        // TER: upstream update check disabled -- TER updates come from termitus.online (signed).\n        await Task.CompletedTask;\n        return;\n}' "$TM"
+  grep -q "TER: upstream update check disabled" "$TM" || { echo "ОШИБКА: TaskManager.cs не пропатчен"; exit 1; }
+  note "TaskManager.cs: фоновая проверка обновлений v2rayN/ядер с GitHub отключена"
+fi
+
 # ConfigHandler.LoadConfig: Russian UI by default (upstream: zh for Chinese locale,
 # otherwise English) + TER one-time config migrations (TermitusDefaults).
 CH="$ROOT/ServiceLib/Handler/ConfigHandler.cs"

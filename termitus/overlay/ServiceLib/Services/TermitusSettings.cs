@@ -21,6 +21,15 @@ public static class TermitusSettings
         set => Write(KillSwitchKey, value ? "1" : "0");
     }
 
+    /// <summary>«Защищать весь трафик компьютера» (0.6.1, default ON): Connect brings TUN up,
+    /// asking the admin password once per app run (upstream keeps it in memory only and
+    /// resets EnableTun on every launch -- this is the user's lasting choice instead).</summary>
+    public static bool AllTraffic
+    {
+        get => !(Read().TryGetValue("all_traffic", out var v) && v == "0");
+        set => Write("all_traffic", value ? "1" : "0");
+    }
+
     /// <summary>"system" (default, follows macOS live), "light" or "dark".</summary>
     public static string Theme
     {
