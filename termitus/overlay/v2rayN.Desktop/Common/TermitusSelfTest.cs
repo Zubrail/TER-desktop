@@ -20,7 +20,7 @@ namespace v2rayN.Desktop.Common;
 ///   retry-account    «Повторить» on «Аккаунт»        retry-support  «Повторить» on «Поддержка»
 ///   logout-ask       open the «Выйти» sheet          logout-confirm «Выйти» in the sheet
 ///   connect          press the big Connect button (other-VPN check runs first)
-///   tun-sheet / tun-pwd:TEXT / tun-skip / tun-dump   the 0.6.2 admin-password sheet (never a real password)
+///   tun-sheet / tun-skip   the 0.6.4 Windows administrator sheet
 ///   other-vpn-retry / other-vpn-force   the two buttons of the "another VPN" card
 ///   fake-connected   show the connected look with sample numbers (no real tunnel)
 ///   pay / pay-start / pay-cancel-wait / pay-close   the payment sheet (0.5)
@@ -131,24 +131,14 @@ internal static class TermitusSelfTest
                     Exec(vm.LogoutAskCmd);
                     break;
 
-                case "tun-sheet": // 0.6.2: the admin-password sheet, no Connect
-                    vm.TestOpenTunPassword();
+                case "tun-sheet": // 0.6.4: the Windows administrator sheet, no Connect
+                    vm.TestOpenTunAsk();
                     await Task.Delay(300);
                     break;
 
-                case "tun-pwd": // type a password and press «Разрешить» (wrong one only -- test box)
-                    vm.TunPasswordText = arg;
-                    Exec(vm.TunPasswordOkCmd);
-                    await Task.Delay(6000);
-                    break;
-
                 case "tun-skip":
-                    Exec(vm.TunPasswordSkipCmd);
+                    Exec(vm.TunAskSkipCmd);
                     await Task.Delay(400);
-                    break;
-
-                case "tun-dump":
-                    Logging.SaveLog($"TER tour: tun sheet={vm.ShowTunPassword} checking={vm.TunPasswordChecking} error='{vm.TunPasswordError}' textEmpty={vm.TunPasswordText.Length == 0}");
                     break;
 
                 case "logout-confirm":

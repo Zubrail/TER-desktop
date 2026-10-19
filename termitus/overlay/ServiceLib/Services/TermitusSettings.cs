@@ -30,6 +30,14 @@ public static class TermitusSettings
         set => Write("all_traffic", value ? "1" : "0");
     }
 
+    /// <summary>One-shot (0.6.4, Windows): «Продолжить» in the administrator sheet sets it just before TER restarts elevated;
+    /// the elevated start clears it and connects by itself.</summary>
+    public static bool ConnectAfterElevation
+    {
+        get => Read().TryGetValue("connect_after_elevation", out var v) && v == "1";
+        set => Write("connect_after_elevation", value ? "1" : "0");
+    }
+
     /// <summary>"system" (default, follows macOS live), "light" or "dark".</summary>
     public static string Theme
     {

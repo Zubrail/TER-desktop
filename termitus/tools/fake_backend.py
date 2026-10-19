@@ -191,4 +191,4 @@ class H(BaseHTTPRequestHandler):
 
 if os.environ.get("SHUTDOWN_AFTER"):
     threading.Timer(float(os.environ["SHUTDOWN_AFTER"]), lambda: os._exit(0)).start()
-ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
+ThreadingHTTPServer((os.environ.get("FAKE_BIND", "127.0.0.1"), PORT), H).serve_forever()

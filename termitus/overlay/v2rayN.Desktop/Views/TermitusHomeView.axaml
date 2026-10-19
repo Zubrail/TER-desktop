@@ -2182,13 +2182,13 @@
             </Border>
         </Panel>
 
-        <!-- 0.6.2: TER's own admin-password sheet for «Защищать весь трафик» (TermitusHomeViewModel.Tun.cs) -->
+        <!-- 0.6.4: Windows «Весь трафик» needs administrator rights -> TER restarts elevated (TermitusHomeViewModel.Tun.cs) -->
         <Panel
-            x:Name="tunPasswordSheet"
+            x:Name="tunAskSheet"
             Grid.Column="0"
             Grid.ColumnSpan="2"
             Background="#59000000"
-            IsVisible="{Binding ShowTunPassword}">
+            IsVisible="{Binding ShowTunAsk}">
             <Border
                 Width="440"
                 Padding="26,24,26,20"
@@ -2198,34 +2198,12 @@
                 BoxShadow="0 2 6 0 #1F000000, 0 18 48 0 #33000000"
                 CornerRadius="20">
                 <StackPanel Spacing="0">
-                    <TextBlock FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.TunPwdTitle}" TextWrapping="Wrap" />
-                    <TextBlock Margin="0,10,0,0" FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Loc.TunPwdBody}" TextWrapping="Wrap" />
-                    <TextBox
-                        x:Name="txtTunPassword"
-                        Margin="0,16,0,0"
-                        PasswordChar="●"
-                        Watermark="{Binding Loc.TunPwdPlaceholder}"
-                        IsEnabled="{Binding !TunPasswordChecking}"
-                        Text="{Binding TunPasswordText, Mode=TwoWay}" />
-                    <TextBlock
-                        Margin="0,8,0,0"
-                        FontSize="13"
-                        Foreground="{DynamicResource TermErr}"
-                        IsVisible="{Binding TunPasswordError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                        Text="{Binding TunPasswordError}"
-                        TextWrapping="Wrap" />
-                    <TextBlock Margin="0,10,0,0" FontSize="13" LineHeight="18" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.TunPwdNote}" TextWrapping="Wrap" />
+                    <TextBlock FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.TunAskTitle}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,10,0,0" FontSize="14" Foreground="{DynamicResource TermText}" Text="{Binding Loc.TunAskBody}" TextWrapping="Wrap" />
                     <StackPanel Margin="0,22,0,0" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
-                        <Button
-                            Classes="term-secondary"
-                            Command="{Binding TunPasswordSkipCmd}"
-                            Content="{Binding Loc.TunPwdSkip}"
-                            IsEnabled="{Binding !TunPasswordChecking}" />
-                        <Button Classes="term-primary" Command="{Binding TunPasswordOkCmd}" IsDefault="True" IsEnabled="{Binding !TunPasswordChecking}">
-                            <Panel>
-                                <TextBlock Foreground="White" IsVisible="{Binding !TunPasswordChecking}" Text="{Binding Loc.TunPwdOk}" />
-                                <TextBlock Foreground="White" IsVisible="{Binding TunPasswordChecking}" Text="{Binding Loc.TunPwdChecking}" />
-                            </Panel>
+                        <Button Classes="term-secondary" Command="{Binding TunAskSkipCmd}" Content="{Binding Loc.TunAskBrowsers}" />
+                        <Button Classes="term-primary" Command="{Binding TunAskOkCmd}" IsDefault="True">
+                            <TextBlock Foreground="White" Text="{Binding Loc.TunAskContinue}" />
                         </Button>
                     </StackPanel>
                 </StackPanel>

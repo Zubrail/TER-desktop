@@ -51,7 +51,7 @@ public sealed partial class TermitusLocale
 
     // ---- Friends ----
     public string AcctFriendsTitle => S("Друзья", "Friends");
-    public string AcctFriendsHint => S("Поделитесь ссылкой — за каждого друга вы получаете бонус.", "Share your link — you get a bonus for every friend.");
+    public string AcctFriendsHint => S("Поделитесь ссылкой — каждый раз, когда друг оплачивает подписку или пополняет баланс, вы получаете бонус: дни подписки или процент на баланс.", "Share your link — every time a friend pays for a subscription or tops up, you get a bonus: subscription days or a percentage to your balance.");
     public string AcctFriendsLink => S("Ваша ссылка", "Your link");
     public string AcctFriendsNoLink => S("Ссылка появится после входа через Telegram.", "The link appears after you sign in with Telegram.");
     public string AcctFriendsInvited => S("приглашено", "invited");

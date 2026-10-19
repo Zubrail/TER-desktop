@@ -15,6 +15,11 @@ FILE_VERSION="$(tr -d ' \n' < "$HERE/VERSION")"
 VERSION="${1:-$FILE_VERSION}"
 [ "$VERSION" = "$FILE_VERSION" ] || { echo "version $VERSION != VERSION file ($FILE_VERSION): bump VERSION, re-run apply-changes.sh and publish"; exit 1; }
 PUB="$HERE/upstream/v2rayN/bin/termitus/osx-arm64"
+# 14.10: always publish fresh (a stale publish dir once shipped old code under a new version, LESSONS 29)
+rm -rf "$PUB"
+(cd "$HERE/upstream/v2rayN" && DOTNET_ROOT=$HOME/.dotnet "$HOME/.dotnet/dotnet" publish v2rayN.Desktop/v2rayN.Desktop.csproj \
+  -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true \
+  -p:Version="$VERSION" -o "$PUB" -nologo -v q) || { echo "dotnet publish failed"; exit 1; }
 CORES="$HERE/cores"
 DIST="$HERE/dist"
 APP="$DIST/TER.app"

@@ -103,6 +103,13 @@ fi
 
 OVERLAY="$SELF_DIR/termitus/overlay"
 
+echo "==> TLS без Network.framework (15.10: .NET 10 падал NullReference в SafeDeleteNwContext на macOS 26)"
+DCSPROJ="$ROOT/v2rayN.Desktop/v2rayN.Desktop.csproj"
+grep -q 'Include="System.Net.Security.UseNetworkFramework" Value="true"' "$DCSPROJ" \
+  || grep -q 'Include="System.Net.Security.UseNetworkFramework" Value="false"' "$DCSPROJ" \
+  || { echo "ОШИБКА: в $DCSPROJ не найден переключатель UseNetworkFramework (upstream изменился?)"; exit 1; }
+perl -pi -e 's{(Include="System\.Net\.Security\.UseNetworkFramework" Value=")true(")}{${1}false${2}}' "$DCSPROJ"
+
 echo "==> версия TER $TER_VERSION (заголовок окна, User-Agent, Info.plist)"
 DBP="$ROOT/Directory.Build.props"
 backup "$DBP"
@@ -295,6 +302,27 @@ EOF
 )" perl -0777 -pi -e 's{\n(    #region Private\n)}{\n$ENV{TER_INS}\n\n$1}' "$CM"
   grep -q "public bool? TermitusCoreAlive()" "$CM" || { echo "ОШИБКА: не удалось пропатчить CoreManager (TermitusCoreAlive)"; exit 1; }
   note "CoreManager: TermitusCoreAlive() для авто-переподключения/kill switch"
+fi
+
+# ---- TER 0.6.4: macOS TUN core through the OS authorization dialog (TermitusMacCore) ----
+# ProcessService: members virtual + a protected ctor, so TermitusMacProcess (a root core we only
+# watch by pid) can stand in for a child process inside CoreManager.
+PS="$ROOT/ServiceLib/Services/ProcessService.cs"
+if [ -f "$PS" ] && ! grep -q "protected ProcessService()" "$PS"; then
+  backup "$PS"
+  perl -0777 -pi -e 's{public int Id => _process\.Id;}{public virtual int Id => _process.Id;}; s{public bool HasExited => _process\.HasExited;}{public virtual bool HasExited => _process.HasExited;\n\n    // TER 0.6.4: for TermitusMacProcess (no child process behind it)\n    protected ProcessService()\n    {\n        _process = null!;\n    }}; s{public async Task StopAsync\(\)}{public virtual async Task StopAsync()}; s{    public void Dispose\(\)}{    public virtual void Dispose()}' "$PS"
+  { grep -q "protected ProcessService()" "$PS" && grep -q "public virtual async Task StopAsync()" "$PS" \
+    && grep -q "public virtual void Dispose()" "$PS" && grep -q "public virtual bool HasExited" "$PS" && grep -q "public virtual int Id" "$PS"; } \
+    || { echo "ОШИБКА: не удалось пропатчить ProcessService"; exit 1; }
+  note "ProcessService: virtual-члены для TermitusMacProcess"
+fi
+# CoreAdminManager: on macOS start / stop the core through TermitusMacCore; Linux keeps upstream's sudo path.
+CA="$ROOT/ServiceLib/Manager/CoreAdminManager.cs"
+if [ -f "$CA" ] && ! grep -q "TermitusMacCore" "$CA"; then
+  backup "$CA"
+  perl -0777 -pi -e 's{(public async Task<ProcessService\?> RunProcessAsLinuxSudo\(string fileName, CoreInfo coreInfo, string configPath\)\n    \{\n)}{$1        if (Utils.IsMacOS())\n        {\n            return await TermitusMacCore.StartAsync(fileName, coreInfo, configPath, _updateFunc); // TER 0.6.4\n        }\n\n}; s{(public async Task KillProcessAsLinuxSudo\(\)\n    \{\n)}{$1        if (Utils.IsMacOS())\n        {\n            await TermitusMacCore.StopAsync(); // TER 0.6.4\n            _linuxSudoPid = -1;\n            return;\n        }\n\n}' "$CA"
+  [ "$(grep -c "TermitusMacCore" "$CA")" = "2" ] || { echo "ОШИБКА: не удалось пропатчить CoreAdminManager"; exit 1; }
+  note "CoreAdminManager: macOS-ядро через системное окно авторизации"
 fi
 
 # sing-box TUN: route IPv6 into the tunnel whenever the host has a global IPv6

@@ -311,6 +311,14 @@ public partial class TermitusHomeViewModel
             {
                 await DisconnectAsync();
             }
+            // 0.6.4 (LESSONS #2): whatever the state, no core may outlive the swap -- stop it (Mac: the root core
+            // too, and wait for it) and clear the system proxy before TER quits.
+            PublishSysProxy(ESysProxyType.ForcedClear);
+            await CoreManager.Instance.CoreStop();
+            if (OperatingSystem.IsMacOS())
+            {
+                await TermitusMacCore.ShutdownAsync(); // core and supervisor
+            }
             var open = !(TermitusTestHooks.IsTestInstance && !TermitusTestHooks.UpdateTarget.IsNullOrEmpty());
             if (!TermitusUpdater.StartSwap(staged.AppPath, target!, open))
             {

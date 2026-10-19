@@ -177,23 +177,16 @@ public sealed partial class TermitusLocale
 
     // Connect button / status
     public string TapToConnect => S("Нажмите, чтобы подключиться", "Tap to connect");
-    // 0.6.2: TER's own admin-password sheet (upstream's lives in the hidden advanced view)
-    public string TunPwdTitle => S("Пароль от Mac", "Your Mac password");
-    public string TunPwdBody => S("Чтобы через TER шли все программы, а не только браузер, macOS нужно разрешение администратора. Введите пароль, которым входите в Mac.",
-        "To send every app through TER, not just the browser, macOS needs administrator permission. Enter the password you use to log in to your Mac.");
-    public string TunPwdNote => S("Пароль остаётся только на этом Mac: никуда не отправляется и не сохраняется. После перезапуска TER спросит снова.",
-        "The password stays on this Mac: it is never sent or saved. TER asks again after a restart.");
-    public string TunPwdPlaceholder => S("Пароль от Mac", "Mac password");
-    public string TunPwdOk => S("Разрешить", "Allow");
-    public string TunPwdSkip => S("Только браузеры", "Browsers only");
-    public string TunPwdChecking => S("Проверяем…", "Checking…");
-    public string TunPwdWrong => S("Пароль не подошёл. Попробуйте ещё раз.", "Wrong password. Try again.");
-    public string TunPwdNotAdmin => S("У этой учётной записи Mac нет прав администратора — защищены будут только браузеры.",
-        "This Mac account is not an administrator — only browsers will be protected.");
-    // 0.6.1: «Защищать весь трафик» on Connect
-    public string TunAsking => S("Ждём пароль от Mac…", "Waiting for your Mac password…");
-    public string TunSkipped => S("Пароль не введён — через TER идут только браузеры. Чтобы защитить всё: отключитесь и подключитесь снова.",
-        "No password — only browsers go through TER. To protect everything: disconnect and connect again.");
+    // 0.6.4: «Весь трафик». Mac: the system dialog (Touch ID / password) asks; Windows: TER's own sheet before the UAC restart
+    public string TunAskTitle => S("Нужно разрешение Windows", "Windows permission needed");
+    public string TunAskBody => S("Чтобы защитить весь трафик (игры, мессенджеры, все программы), TER перезапустится с правами администратора. Windows спросит разрешение — нажмите «Да».",
+        "To protect all traffic (games, messengers, every program), TER restarts with administrator rights. Windows will ask for permission — press “Yes”.");
+    public string TunAskContinue => S("Продолжить", "Continue");
+    public string TunAskBrowsers => S("Только браузеры", "Browsers only");
+    public string TunMacPrompt => S("TER запрашивает разрешение, чтобы защитить весь трафик этого Mac.", "TER needs permission to protect all traffic on this Mac.");
+    public string TunAsking => S("Ждём разрешение…", "Waiting for permission…");
+    public string TunSkipped => S("Без разрешения защищены только браузеры. Чтобы защитить всё: отключитесь и подключитесь снова.",
+        "Without permission only browsers are protected. To protect everything: disconnect and connect again.");
     public string Connecting => S("Подключаемся…", "Connecting…");
     public string Connected => S("Подключено", "Connected");
     public string Disconnected => S("Отключено", "Disconnected");

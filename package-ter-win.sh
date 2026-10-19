@@ -7,10 +7,9 @@
 # (update key embedded, real SOURCE_URL). An installer (Inno Setup) needs Windows itself --
 # this zip is what the VM live test and the first beta use.
 #
-#   publish first:  (cd upstream/v2rayN && dotnet publish v2rayN.Desktop/v2rayN.Desktop.csproj \
-#                     -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true \
-#                     -o bin/termitus/win-x64)
-#   then:           bash package-ter-win.sh
+#   run:  bash package-ter-win.sh   (it publishes itself -- 14.10: a stale publish dir once
+#         shipped 0.6.2 code inside the 0.6.3 zip; ReadyToRun because JIT-at-start took 70-100 s
+#         under x64 emulation on Windows ARM)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PUB="$HERE/upstream/v2rayN/bin/termitus/win-x64"
@@ -31,6 +30,10 @@ SOURCE_URL="$(tr -d ' \n' < "$HERE/termitus/SOURCE_URL" 2>/dev/null || true)"
 case "$SOURCE_URL" in https://*) ;; *) echo "termitus/SOURCE_URL must hold the https URL of the public source repository"; exit 1;; esac
 echo "$SOURCE_URL" | grep -q 'REPLACE-ME' && { [ "${ALLOW_PLACEHOLDER_SOURCE:-}" = 1 ] || { echo "REFUSING: SOURCE_URL is a placeholder"; exit 1; }; }
 
+rm -rf "$PUB"
+(cd "$HERE/upstream/v2rayN" && DOTNET_ROOT=$HOME/.dotnet "$HOME/.dotnet/dotnet" publish v2rayN.Desktop/v2rayN.Desktop.csproj \
+  -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true \
+  -p:Version="$VERSION" -o "$PUB" -nologo -v q) || { echo "dotnet publish failed"; exit 1; }
 [ -f "$PUB/v2rayN.exe" ] || { echo "no publish output in $PUB (dotnet publish -r win-x64 first)"; exit 1; }
 [ -f "$WIN/x/xray.exe" ] && [ -f "$WIN/x/wintun.dll" ] && [ -f "$WIN"/s/*/sing-box.exe ] || { echo "Windows cores missing in $WIN (BUILD.md «Windows»)"; exit 1; }
 RF="$CORES/rf"
@@ -39,7 +42,7 @@ RF="$CORES/rf"
 
 rm -rf "$DIST/win" && mkdir -p "$OUT"
 cp -R "$PUB/." "$OUT/"
-rm -f "$OUT"/*.pdb
+rm -f "$OUT"/*.pdb "$OUT"/*.icns
 # The process shows up as TER in Task Manager (the single-file bundle carries v2rayN.dll inside).
 mv "$OUT/v2rayN.exe" "$OUT/TER.exe"
 mkdir -p "$OUT/bin/xray" "$OUT/bin/sing_box"

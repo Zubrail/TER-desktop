@@ -1,209 +1,190 @@
-using System.Diagnostics;
 using ServiceLib.Services;
 
 namespace ServiceLib.ViewModels;
 
 /// <summary>
-/// 0.6.2: «Защищать весь трафик компьютера» (TUN) with TER's OWN admin-password sheet.
+/// 0.6.4: «Защищать весь трафик компьютера» (TUN). Privileges only through the OS's own dialog:
 ///
-/// Why not upstream's: its password dialog is registered by StatusBarView, which lives in
-/// the hidden «Для опытных» panel and is never activated in the simple UI -- 0.6.1 called
-/// it anyway, the interaction had no handler ("Failed to find a registration for an
-/// Interaction" in DoEnableTun) and Connect waited 3 minutes on «Ищем самый быстрый сервер…»
-/// (owner's Mac, 13.10). Here TER asks itself, checks the password with
-/// `sudo -S -k -v` (stdin only, never argv/log), stores it where upstream expects it
-/// (AppManager.LinuxSudoPwd, memory only) and only then flips EnableTun -- upstream's
-/// AllowEnableTun() is true at that point, so it saves the config and restarts the core
-/// without any dialog of its own.
+///  - macOS: no password sheet of ours any more. TUN is switched on and the core is started by
+///    TermitusMacCore through the system authorization dialog (Touch ID or password -- the OS
+///    asks, TER never sees it). Closing the dialog = «только браузеры» (TUN off, system proxy).
+///  - Windows: the TUN core needs administrator rights. Already administrator -> TUN on. Otherwise
+///    TER's own sheet explains it, «Продолжить» saves a one-shot flag and restarts TER elevated
+///    (UAC / Windows Hello); the elevated start connects by itself. UAC refused -> browsers only.
 ///
-/// «Только браузеры» = this run keeps the system proxy; the sheet is not shown again until
-/// the user presses Connect themselves (auto-reconnects never pop it up).
+/// Upstream's own password dialog is registered by StatusBarView in the hidden «Для опытных» panel;
+/// calling it from the simple UI hung Connect for minutes (0.6.1, LESSONS #1) -- never used here.
+/// The decisions live in <see cref="TermitusTunPlan"/> (unit-tested).
 /// </summary>
 public partial class TermitusHomeViewModel
 {
-    [Reactive] public partial bool ShowTunPassword { get; set; }
-    [Reactive] public partial string TunPasswordText { get; set; } = string.Empty;
-    [Reactive] public partial string TunPasswordError { get; set; } = string.Empty;
-    [Reactive] public partial bool TunPasswordChecking { get; set; }
-    public ReactiveCommand<RxVoid, RxVoid> TunPasswordOkCmd { get; private set; } = null!;
-    public ReactiveCommand<RxVoid, RxVoid> TunPasswordSkipCmd { get; private set; } = null!;
+    [Reactive] public partial bool ShowTunAsk { get; set; }
+    public ReactiveCommand<RxVoid, RxVoid> TunAskOkCmd { get; private set; } = null!;
+    public ReactiveCommand<RxVoid, RxVoid> TunAskSkipCmd { get; private set; } = null!;
 
-    private TaskCompletionSource<string?>? _tunPwdWait;
-    private static readonly TimeSpan TunPasswordTimeout = TimeSpan.FromMinutes(3);
+    private TaskCompletionSource<bool>? _tunAskWait;
+    private bool _tunBrowsersOnlyThisSession;
+    private static readonly TimeSpan TunAskTimeout = TimeSpan.FromMinutes(3);
+
+    private enum TunResult { Ready, Skipped, Exiting }
 
     private void InitTun()
     {
-        TunPasswordOkCmd = ReactiveCommand.CreateFromTask(() => Bg(CheckTunPasswordAsync));
-        TunPasswordSkipCmd = ReactiveCommand.CreateFromTask(() =>
+        TunAskOkCmd = ReactiveCommand.CreateFromTask(() =>
         {
-            _tunPwdWait?.TrySetResult(null);
+            _tunAskWait?.TrySetResult(true);
+            return Task.CompletedTask;
+        });
+        TunAskSkipCmd = ReactiveCommand.CreateFromTask(() =>
+        {
+            _tunAskWait?.TrySetResult(false);
             return Task.CompletedTask;
         });
     }
 
     /// <summary>
-    /// Brings TUN up when the user wants all traffic protected. True = TUN is on (or not
-    /// wanted / not applicable); false = wanted but no password, Connect goes on via the
-    /// system proxy and says so. Not on a test instance (TUN forced off there) and not on
-    /// Windows yet (upstream would restart the app as administrator).
+    /// Brings TUN up when the user wants all traffic protected. Ready = TUN is on (or not wanted /
+    /// not applicable); Skipped = wanted but not allowed, Connect goes on via the system proxy and
+    /// says so; Exiting = TER is restarting as administrator, stop connecting here.
+    /// Not on a test instance (TUN forced off there).
     /// </summary>
-    private async Task<bool> EnsureTunAsync()
+    private async Task<TunResult> EnsureTunAsync(bool reloadNow = false)
     {
-        if (!TermitusSettings.AllTraffic || TermitusTestHooks.IsTestInstance || !Utils.IsMacOS()
-            || _config.TunModeItem?.EnableTun == true)
+        var step = TermitusTunPlan.Decide(TermitusSettings.AllTraffic, TermitusTestHooks.IsTestInstance, Utils.IsMacOS(),
+            Utils.IsWindows(), _config.TunModeItem?.EnableTun == true, Utils.IsWindows() && Utils.IsAdministrator(),
+            _tunBrowsersOnlyThisSession);
+        switch (step)
         {
-            return true;
-        }
+            case TermitusTunPlan.Step.NotWanted:
+            case TermitusTunPlan.Step.AlreadyOn:
+                return TunResult.Ready;
 
-        if (AppManager.Instance.LinuxSudoPwd.IsNullOrEmpty())
-        {
-            var wait = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _tunPwdWait = wait;
-            OnUi(() =>
-            {
-                TunPasswordText = string.Empty;
-                TunPasswordError = string.Empty;
-                TunPasswordChecking = false;
-                SubStatusText = Loc.TunAsking;
-                ShowTunPassword = true;
-            });
-            var first = await Task.WhenAny(wait.Task, Task.Delay(TunPasswordTimeout));
-            var password = first == wait.Task ? wait.Task.Result : null;
-            _tunPwdWait = null;
-            OnUi(() =>
-            {
-                ShowTunPassword = false;
-                TunPasswordText = string.Empty; // do not keep it in the view model
-            });
-            if (password.IsNullOrEmpty())
-            {
-                Logging.SaveLog($"{_tag}: all-traffic mode skipped (no admin password) -- system proxy only");
-                TermitusErrorLog.Add("пароль администратора не введён — защищены только браузеры");
-                return false;
-            }
-            AppManager.Instance.LinuxSudoPwd = password;
-        }
+            case TermitusTunPlan.Step.BrowsersOnly:
+                return TunResult.Skipped;
 
-        // Password known -> upstream's AllowEnableTun() is true: DoEnableTun saves the config
-        // and reloads the core itself, no dialog.
-        OnUi(() => _main.StatusBarViewModel.EnableTun = true);
-        var until = DateTime.Now.AddSeconds(5);
-        while (_config.TunModeItem?.EnableTun != true && DateTime.Now < until)
-        {
-            await Task.Delay(100);
-        }
-        var on = _config.TunModeItem?.EnableTun == true;
-        if (!on)
-        {
-            Logging.SaveLog($"{_tag}: EnableTun did not stick after the password -- system proxy only");
-        }
-        return on;
-    }
-
-    private async Task CheckTunPasswordAsync()
-    {
-        var password = TunPasswordText;
-        if (password.IsNullOrEmpty() || _tunPwdWait == null)
-        {
-            return;
-        }
-        OnUi(() =>
-        {
-            TunPasswordChecking = true;
-            TunPasswordError = string.Empty;
-        });
-        var verdict = await VerifyAdminPasswordAsync(password);
-        OnUi(() => TunPasswordChecking = false);
-        switch (verdict)
-        {
-            case AdminCheck.Ok:
-                _tunPwdWait?.TrySetResult(password);
-                break;
-            case AdminCheck.NotAdmin:
-                OnUi(() => TunPasswordError = Loc.TunPwdNotAdmin);
-                break;
-            default:
-                OnUi(() =>
+            case TermitusTunPlan.Step.MacAuthorize:
+                // The system dialog appears when the core starts (Reload below / by the caller).
+                OnUi(() => SubStatusText = Loc.TunAsking);
+                await SetTunOnAsync();
+                if (reloadNow)
                 {
-                    TunPasswordError = Loc.TunPwdWrong;
-                    TunPasswordText = string.Empty;
-                });
-                break;
+                    await _main.Reload();
+                    return await TunFallbackIfCancelledAsync() ? TunResult.Skipped : TunResult.Ready;
+                }
+                return TunResult.Ready;
+
+            case TermitusTunPlan.Step.WinEnableAsAdmin:
+                await SetTunOnAsync();
+                if (reloadNow)
+                {
+                    await _main.Reload();
+                }
+                return TunResult.Ready;
+
+            default: // WinAskRestart
+                return await AskWindowsRestartAsync();
         }
     }
 
-    /// <summary>Self-test tour only (test instance): shows the sheet without a Connect, so its
-    /// look, the wrong-password path and «Только браузеры» can be checked live.</summary>
-    public void TestOpenTunPassword()
+    private async Task SetTunOnAsync()
+    {
+        // Config first: upstream's StatusBar toggle then sees "already on" and does not open any dialog.
+        _config.TunModeItem.EnableTun = true;
+        await ConfigHandler.SaveConfig(_config);
+        OnUi(() => _main.StatusBarViewModel.EnableTun = true);
+    }
+
+    /// <summary>The user closed the system dialog: TUN off again, system proxy, say so. True = fell back.</summary>
+    private async Task<bool> TunFallbackIfCancelledAsync()
+    {
+        if (!TermitusMacCore.ConsumeCancelled())
+        {
+            return false;
+        }
+        Logging.SaveLog($"{_tag}: all-traffic mode skipped (authorization dialog closed) -- system proxy only");
+        TermitusErrorLog.Add("разрешение не дано — защищены только браузеры");
+        _config.TunModeItem.EnableTun = false;
+        await ConfigHandler.SaveConfig(_config);
+        OnUi(() => _main.StatusBarViewModel.EnableTun = false);
+        PublishSysProxy(ESysProxyType.ForcedChange);
+        await _main.Reload();
+        return true;
+    }
+
+    private async Task<TunResult> AskWindowsRestartAsync()
+    {
+        var wait = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _tunAskWait = wait;
+        OnUi(() => ShowTunAsk = true);
+        var first = await Task.WhenAny(wait.Task, Task.Delay(TunAskTimeout));
+        var proceed = first == wait.Task && wait.Task.Result;
+        _tunAskWait = null;
+        OnUi(() => ShowTunAsk = false);
+
+        var started = false;
+        if (proceed)
+        {
+            TermitusSettings.ConnectAfterElevation = true;
+            started = ProcUtils.RebootAsAdmin();
+        }
+        switch (TermitusTunPlan.AfterAsk(proceed, started))
+        {
+            case TermitusTunPlan.AskOutcome.Restarting:
+                Logging.SaveLog($"{_tag}: restarting as administrator for all-traffic mode");
+                await AppManager.Instance.AppExitAsync(true);
+                return TunResult.Exiting;
+
+            case TermitusTunPlan.AskOutcome.Declined:
+                TermitusSettings.ConnectAfterElevation = false;
+                Logging.SaveLog($"{_tag}: administrator restart declined -- system proxy only");
+                TermitusErrorLog.Add("Windows не дал разрешение — защищены только браузеры");
+                return TunResult.Skipped;
+
+            default:
+                _tunBrowsersOnlyThisSession = true;
+                Logging.SaveLog($"{_tag}: all-traffic mode skipped (browsers only) -- system proxy only");
+                return TunResult.Skipped;
+        }
+    }
+
+    /// <summary>Startup: the elevated restart connects by itself, once.</summary>
+    private async Task TunStartupAsync()
+    {
+        try
+        {
+            if (Utils.IsMacOS())
+            {
+                TermitusMacCore.LogStaleOnStartup();
+            }
+            var step = TermitusTunPlan.OnStartup(TermitusSettings.ConnectAfterElevation, Utils.IsAdministrator(), Utils.IsWindows());
+            if (step == TermitusTunPlan.StartupStep.Nothing)
+            {
+                return;
+            }
+            TermitusSettings.ConnectAfterElevation = false;
+            if (step == TermitusTunPlan.StartupStep.ConnectAfterRestart && !_connected && await HasProfilesAsync())
+            {
+                await Task.Delay(1500); // let the window and the core manager settle
+                Logging.SaveLog($"{_tag}: connecting after the administrator restart");
+                await ToggleConnectAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+        }
+    }
+
+    /// <summary>Self-test tour only (test instance): shows the Windows sheet without a Connect.</summary>
+    public void TestOpenTunAsk()
     {
         if (!TermitusTestHooks.IsTestInstance)
         {
             return;
         }
-        var wait = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _tunPwdWait = wait;
-        _ = wait.Task.ContinueWith(_ => OnUi(() => ShowTunPassword = false));
-        TunPasswordText = string.Empty;
-        TunPasswordError = string.Empty;
-        ShowTunPassword = true;
-    }
-
-    private enum AdminCheck { Ok, Wrong, NotAdmin }
-
-    /// <summary>
-    /// `sudo -S -k -v -p ""`: -k forgets any cached ticket so the password really is checked,
-    /// -v only validates (runs nothing), the password goes through stdin. Exit 0 = correct
-    /// password of an administrator account.
-    /// </summary>
-    private static async Task<AdminCheck> VerifyAdminPasswordAsync(string password)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo("/usr/bin/sudo")
-            {
-                RedirectStandardInput = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            foreach (var a in new[] { "-S", "-k", "-v", "-p", "" })
-            {
-                psi.ArgumentList.Add(a);
-            }
-            psi.Environment["LC_ALL"] = "C"; // stable English stderr for the not-admin check
-            using var p = Process.Start(psi);
-            if (p == null)
-            {
-                return AdminCheck.Wrong;
-            }
-            await p.StandardInput.WriteLineAsync(password);
-            p.StandardInput.Close();
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            string err;
-            try
-            {
-                err = await p.StandardError.ReadToEndAsync(cts.Token);
-                await p.WaitForExitAsync(cts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                try { p.Kill(); } catch { /* already gone */ }
-                return AdminCheck.Wrong;
-            }
-            if (p.ExitCode == 0)
-            {
-                return AdminCheck.Ok;
-            }
-            return err.Contains("sudoers", StringComparison.OrdinalIgnoreCase)
-                   || err.Contains("not allowed", StringComparison.OrdinalIgnoreCase)
-                ? AdminCheck.NotAdmin
-                : AdminCheck.Wrong;
-        }
-        catch (Exception ex)
-        {
-            Logging.SaveLog("TermitusHome: admin password check failed", ex);
-            return AdminCheck.Wrong;
-        }
+        var wait = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _tunAskWait = wait;
+        _ = wait.Task.ContinueWith(_ => OnUi(() => ShowTunAsk = false));
+        ShowTunAsk = true;
     }
 }

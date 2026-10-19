@@ -419,13 +419,13 @@ public partial class TermitusHomeViewModel : MyReactiveObject
                 }
                 return;
             }
-            // On while connected: TER's own password sheet now (upstream's dialog is not
-            // available in the simple UI); otherwise the next Connect does it.
+            // On while connected: the system dialog (Mac) / TER's own sheet (Windows) now (upstream's
+            // dialog is not available in the simple UI); otherwise the next Connect does it.
             if (_connected)
             {
                 _ = Bg(async () =>
                 {
-                    if (!await EnsureTunAsync())
+                    if (await EnsureTunAsync(reloadNow: true) == TunResult.Skipped)
                     {
                         OnUi(() => SubStatusText = Loc.TunSkipped);
                     }
@@ -477,6 +477,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             }
 
             await RefreshStateAsync();
+            _ = TunStartupAsync();
         }
         catch (Exception ex)
         {
@@ -654,7 +655,12 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             }
         }
 
-        var tunSkipped = !await EnsureTunAsync();
+        var tun = await EnsureTunAsync();
+        if (tun == TunResult.Exiting)
+        {
+            return; // restarting as administrator
+        }
+        var tunSkipped = tun == TunResult.Skipped;
 
         // System proxy (no admin rights needed). If the user switched TUN on in
         // the advanced UI (with its sudo prompt), Reload() brings TUN up instead.
@@ -665,6 +671,10 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             PublishSysProxy(ESysProxyType.ForcedChange);
         }
         await _main.Reload();
+        if (await TunFallbackIfCancelledAsync())
+        {
+            tunSkipped = true; // the Mac authorization dialog was closed while the core started
+        }
 
         _connected = true;
         _connectedAt = DateTime.Now;
