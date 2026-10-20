@@ -607,7 +607,11 @@
             <!-- Connect screen + first run (one page container, animated in by the code-behind) -->
             <Panel x:Name="pageHome" IsVisible="{Binding ShowHome}">
             <!-- Subscription ends in <= 3 days / has ended -->
+            <!-- 0.6.5: banners and the connect screen share ONE vertical flow (banner first, then the screen, which scrolls when the
+                 window is low), so the expiry banner can never be drawn on top of the power button. -->
+            <Grid RowDefinitions="Auto,*,Auto">
             <Border
+                Grid.Row="0"
                 MaxWidth="560"
                 Margin="24,20,24,0"
                 Padding="18,12"
@@ -629,7 +633,9 @@
                         ToolTip.Tip="{Binding Loc.TipRenew}" />
                 </Grid>
             </Border>
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" IsVisible="{Binding !ShowFirstRun}">
             <StackPanel
+                Margin="0,8"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 IsVisible="{Binding !ShowFirstRun}"
@@ -834,6 +840,37 @@
                     </Button>
                 </StackPanel>
 
+                <!-- 0.6.5: trial access: what it is + the way to make it a real account -->
+                <Border Width="420" Padding="18,14" Classes="term-banner info" IsVisible="{Binding HasTrial}">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center" Classes="term-row-title" Text="{Binding TrialLineText}" TextWrapping="Wrap" />
+                        <Button Grid.Column="1" VerticalAlignment="Center" Classes="term-primary" Command="{Binding TrialBindCmd}" Content="{Binding Loc.TrialBind}" IsEnabled="{Binding !TrialBindBusy}" ToolTip.Tip="{Binding Loc.TipTrialBind}" />
+                    </Grid>
+                </Border>
+                <StackPanel Width="420" IsVisible="{Binding TrialBindStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Spacing="2">
+                    <TextBlock Classes="term-hint" HorizontalAlignment="Center" Text="{Binding TrialBindStatus}" TextAlignment="Center" TextWrapping="Wrap" />
+                    <Button HorizontalAlignment="Center" Classes="term-text" Command="{Binding TrialBindCancelCmd}" Content="{Binding Loc.TrialBindCancel}" IsVisible="{Binding TrialBindBusy}" />
+                </StackPanel>
+
+                <!-- 0.6.5: «Пригласить друга» -->
+                <Button
+                    Width="420"
+                    Classes="term-row"
+                    Command="{Binding InviteOpenCmd}"
+                    IsVisible="{Binding ShowInviteRow}"
+                    ToolTip.Tip="{Binding Loc.TipInviteRow}">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Grid.Column="0" Width="30" Height="30" VerticalAlignment="Center" Background="{DynamicResource TermAccentBrush}" CornerRadius="15">
+                            <Path Width="14" Height="14" Data="M7 1 L7 13 M1 7 L13 7" Stretch="Uniform" Stroke="White" StrokeLineCap="Round" StrokeThickness="2.4" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                            <TextBlock FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TermText}" Text="{Binding Loc.InviteRowTitle}" />
+                            <TextBlock FontSize="12.5" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.InviteRowHint}" />
+                        </StackPanel>
+                        <Path Grid.Column="2" Width="9" Height="16" VerticalAlignment="Center" Data="M1 1 L8 8 L1 15" Stretch="Uniform" Stroke="{DynamicResource TermMuted}" StrokeLineCap="Round" StrokeThickness="2" />
+                    </Grid>
+                </Button>
+
                 <!-- 0.5: another VPN owns the default route -->
                 <Border
                     Width="420"
@@ -878,9 +915,11 @@
                 <TextBlock Classes="term-sub" Text="{Binding Loc.RuDirectHint}" />
 
             </StackPanel>
+            </ScrollViewer>
 
             <!-- 0.6: a newer, signed version exists -->
             <Border
+                Grid.Row="2"
                 MaxWidth="560"
                 Margin="24,0,24,20"
                 Padding="18,12"
@@ -896,6 +935,7 @@
                     <Button Grid.Column="2" VerticalAlignment="Center" Classes="term-primary" Command="{Binding UpdateNowCmd}" Content="{Binding Loc.UpdateNow}" />
                 </Grid>
             </Border>
+            </Grid>
 
             <!-- First run (0.4): «Войти через Telegram» / waiting for the bot / paste a link -->
             <Panel
@@ -932,6 +972,38 @@
                         Classes="term-text"
                         Command="{Binding ShowLinkCmd}"
                         Content="{Binding Loc.HaveLink}" />
+                    <!-- 0.6.5: free trial from the app (consent + button; a refusal shows the server's text and the bot) -->
+                    <StackPanel IsVisible="{Binding TrialAvailable}" Spacing="0">
+                        <Button
+                            Margin="0,16,0,0"
+                            Classes="term-secondary term-big"
+                            Command="{Binding TrialStartCmd}"
+                            IsEnabled="{Binding CanStartTrial}"
+                            ToolTip.Tip="{Binding Loc.TrialNeedConsent}">
+                            <Panel>
+                                <TextBlock IsVisible="{Binding !IsTrialStarting}" Text="{Binding Loc.TrialButton}" />
+                                <TextBlock IsVisible="{Binding IsTrialStarting}" Text="{Binding Loc.TrialStarting}" />
+                            </Panel>
+                        </Button>
+                        <Grid Margin="0,10,0,0" ColumnDefinitions="Auto,*">
+                            <CheckBox Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Top" IsChecked="{Binding TrialConsent, Mode=TwoWay}" />
+                            <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Height="20" Classes="term-hint" LineHeight="20" Text="{Binding Loc.TrialConsentPre}" />
+                                <Button Height="20" MinHeight="0" Padding="0" VerticalAlignment="Center" Classes="term-text" Command="{Binding LegalOpenCmd}" CommandParameter="terms" Content="{Binding Loc.TrialTerms}" FontSize="12" />
+                                <TextBlock Height="20" Classes="term-hint" LineHeight="20" Text="{Binding Loc.TrialConsentMid}" />
+                                <Button Height="20" MinHeight="0" Padding="0" VerticalAlignment="Center" Classes="term-text" Command="{Binding LegalOpenCmd}" CommandParameter="consent" Content="{Binding Loc.TrialConsentLink}" FontSize="12" />
+                                <TextBlock Height="20" Classes="term-hint" LineHeight="20" Text="{Binding Loc.TrialConsentPost}" />
+                                <Button Height="20" MinHeight="0" Padding="0" VerticalAlignment="Center" Classes="term-text" Command="{Binding LegalOpenCmd}" CommandParameter="privacy" Content="{Binding Loc.TrialPrivacy}" FontSize="12" />
+                                <TextBlock Height="20" Classes="term-hint" LineHeight="20" Text="{Binding Loc.TrialConsentEnd}" />
+                            </WrapPanel>
+                        </Grid>
+                        <Border Margin="0,12,0,0" Padding="14,12" Classes="term-banner bad" IsVisible="{Binding TrialRefused}">
+                            <StackPanel Spacing="10">
+                                <TextBlock Classes="term-hint" Text="{Binding TrialRefusalText}" TextWrapping="Wrap" />
+                                <Button HorizontalAlignment="Left" Classes="term-primary" Command="{Binding TrialBotCmd}" Content="{Binding Loc.TrialOpenBot}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                     <TextBlock Margin="0,14,0,0" HorizontalAlignment="Center" FontSize="13" Foreground="{DynamicResource TermMuted}" Text="{Binding FirstRunStatus}" TextAlignment="Center" TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -971,6 +1043,39 @@
                         Command="{Binding ImportSubscriptionCmd}"
                         Content="{Binding Loc.ImportButton}"
                         IsEnabled="{Binding !IsBusy}" />
+                    <!-- 0.6.5: free trial from the app (consent + button; a refusal shows the server's text and the bot) -->
+                    <StackPanel IsVisible="{Binding TrialAvailable}" Spacing="0">
+                        <Button
+                            Margin="0,16,0,0"
+                            Classes="term-secondary term-big"
+                            Command="{Binding TrialStartCmd}"
+                            IsEnabled="{Binding CanStartTrial}"
+                            ToolTip.Tip="{Binding Loc.TrialNeedConsent}">
+                            <Panel>
+                                <TextBlock IsVisible="{Binding !IsTrialStarting}" Text="{Binding Loc.TrialButton}" />
+                                <TextBlock IsVisible="{Binding IsTrialStarting}" Text="{Binding Loc.TrialStarting}" />
+                            </Panel>
+                        </Button>
+                        <Grid Margin="0,10,0,0" ColumnDefinitions="Auto,*">
+                            <CheckBox Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Top" IsChecked="{Binding TrialConsent, Mode=TwoWay}" />
+                            <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Height="20" Classes="term-hint" LineHeight="20" Text="{Binding Loc.TrialConsentPre}" />
+                                <Button Height="20" MinHeight="0" Padding="0" VerticalAlignment="Center" Classes="term-text" Command="{Binding LegalOpenCmd}" CommandParameter="terms" Content="{Binding Loc.TrialTerms}" FontSize="12" />
+                                <TextBlock Height="20" Classes="term-hint" LineHeight="20" Text="{Binding Loc.TrialConsentMid}" />
+                                <Button Height="20" MinHeight="0" Padding="0" VerticalAlignment="Center" Classes="term-text" Command="{Binding LegalOpenCmd}" CommandParameter="consent" Content="{Binding Loc.TrialConsentLink}" FontSize="12" />
+                                <TextBlock Height="20" Classes="term-hint" LineHeight="20" Text="{Binding Loc.TrialConsentPost}" />
+                                <Button Height="20" MinHeight="0" Padding="0" VerticalAlignment="Center" Classes="term-text" Command="{Binding LegalOpenCmd}" CommandParameter="privacy" Content="{Binding Loc.TrialPrivacy}" FontSize="12" />
+                                <TextBlock Height="20" Classes="term-hint" LineHeight="20" Text="{Binding Loc.TrialConsentEnd}" />
+                            </WrapPanel>
+                        </Grid>
+                        <Border Margin="0,12,0,0" Padding="14,12" Classes="term-banner bad" IsVisible="{Binding TrialRefused}">
+                            <StackPanel Spacing="10">
+                                <TextBlock Classes="term-hint" Text="{Binding TrialRefusalText}" TextWrapping="Wrap" />
+                                <Button HorizontalAlignment="Left" Classes="term-primary" Command="{Binding TrialBotCmd}" Content="{Binding Loc.TrialOpenBot}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
                     <TextBlock FontSize="13" Foreground="{DynamicResource TermMuted}" Text="{Binding FirstRunStatus}" TextWrapping="Wrap" />
                     <Button
                         HorizontalAlignment="Center"
@@ -1476,6 +1581,28 @@
                     </Border>
 
                     <StackPanel IsVisible="{Binding AccountSignedIn}">
+                    <!-- 0.6.5: trial access + the gift code (redeemed in the bot = a real account) -->
+                    <StackPanel IsVisible="{Binding HasTrial}">
+                        <TextBlock Classes="term-section" Text="{Binding Loc.TrialCardTitle}" />
+                        <Border Padding="18,16" Classes="term-card">
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="term-row-title" Text="{Binding TrialLineText}" TextWrapping="Wrap" />
+                                <TextBlock Classes="term-hint" Text="{Binding Loc.TrialCodeHint}" TextWrapping="Wrap" />
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center" Classes="term-hint" Text="{Binding Loc.TrialCodeLabel}" />
+                                    <Border Grid.Column="1" Margin="0,0,10,0" Padding="12,8" Background="{DynamicResource TermSurface2}" CornerRadius="10">
+                                        <SelectableTextBlock FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding TrialCode}" />
+                                    </Border>
+                                    <Button Grid.Column="2" Classes="term-secondary" Command="{Binding TrialCopyCodeCmd}" Content="{Binding Loc.TrialCopyCode}" />
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <Button Classes="term-primary" Command="{Binding TrialBindCmd}" Content="{Binding Loc.TrialBind}" IsEnabled="{Binding !TrialBindBusy}" ToolTip.Tip="{Binding Loc.TipTrialBind}" />
+                                    <Button VerticalAlignment="Center" Classes="term-text" Command="{Binding TrialBindCancelCmd}" Content="{Binding Loc.TrialBindCancel}" IsVisible="{Binding TrialBindBusy}" />
+                                </StackPanel>
+                                <TextBlock Classes="term-hint" IsVisible="{Binding TrialBindStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Text="{Binding TrialBindStatus}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                     <!-- 0.4.1: the Telegram account (when the backend sends it in /info) -->
                     <StackPanel IsVisible="{Binding HasTelegram}">
                         <TextBlock Classes="term-section" Text="{Binding Loc.TelegramTitle}" />
@@ -2031,6 +2158,7 @@
                             <Button Grid.Column="1" Classes="term-text" Command="{Binding ReportCloseCmd}" Content="{Binding Loc.Close}" IsEnabled="{Binding !ReportSending}" />
                         </Grid>
 
+                        <TextBlock Margin="0,12,0,0" Classes="term-hint" IsVisible="{Binding ReportIsCrash}" Text="{Binding Loc.CrashAsk}" TextWrapping="Wrap" />
                         <!-- editing -->
                         <StackPanel Margin="0,14,0,0" IsVisible="{Binding ReportEditing}" Spacing="0">
                             <TextBlock Classes="term-row-title" Text="{Binding Loc.ReportWhatTitle}" />
@@ -2253,6 +2381,20 @@
                                 <Button Grid.Column="1" Classes="term-secondary" Command="{Binding AcctInviteCopyCmd}" Content="{Binding Loc.AcctInviteCopy}" />
                             </Grid>
                             <TextBlock Classes="term-hint" Margin="2,0,0,0" Text="{Binding Loc.AcctInviteOnce}" />
+                        </StackPanel>
+
+                        <!-- 0.6.5: «Пригласить друга»: big QR of the referral link + the rule -->
+                        <StackPanel Margin="0,16,0,0" IsVisible="{Binding AcctSheetFriend}" Spacing="12">
+                            <Border HorizontalAlignment="Center" Padding="14" Background="White" BorderBrush="{DynamicResource TermLine}" BorderThickness="1" CornerRadius="16">
+                                <Image x:Name="friendQr" Width="260" Height="260" />
+                            </Border>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Border Grid.Column="0" Margin="0,0,10,0" Padding="12,9" VerticalAlignment="Center" Background="{DynamicResource TermSurface2}" CornerRadius="10">
+                                    <TextBlock FontSize="12" Foreground="{DynamicResource TermText}" Text="{Binding RefLink}" TextWrapping="Wrap" />
+                                </Border>
+                                <Button Grid.Column="1" Classes="term-primary" Command="{Binding RefCopyCmd}" Content="{Binding Loc.InviteCopy}" />
+                            </Grid>
+                            <TextBlock HorizontalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TermText}" Text="{Binding RefRule}" TextAlignment="Center" TextWrapping="Wrap" />
                         </StackPanel>
 
                         <!-- new subscription link -->

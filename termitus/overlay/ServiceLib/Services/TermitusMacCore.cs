@@ -132,9 +132,16 @@ public static class TermitusMacCore
         try
         {
             _cancelled = false;
+            // D-1: the pin is the hash embedded in the app; a core in the user's data folder that differs is refused before any dialog.
+            var pin = TermitusCoreHashes.ExpectedFor(coreExe);
+            if (!TermitusCoreHashes.Verify(coreExe, pin))
+            {
+                Logging.SaveLog($"{Tag}: the core on disk does not match the checksum built into TER; not starting it as administrator");
+                throw new Exception(ResUI.FailedToRunCore);
+            }
             var supervisor = TermitusMacShell.BuildSupervisor(
                 Environment.ProcessId, Utils.GetBinConfigPath(), coreExe, coreInfo.Arguments, Utils.GetBinConfigPath(configPath),
-                coreInfo.Environment, LogFile, PidFile, SupFile, StopFile, HaltFile, ReloadFile, OtherCoreExes());
+                coreInfo.Environment, LogFile, PidFile, SupFile, StopFile, HaltFile, ReloadFile, OtherCoreExes(), pin);
             var script = supervisor == null ? null : TermitusMacShell.BuildAppleScript(supervisor, TermitusLocale.Current.TunMacPrompt);
             if (supervisor == null || script == null)
             {

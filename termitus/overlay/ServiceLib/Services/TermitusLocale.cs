@@ -255,6 +255,10 @@ public sealed partial class TermitusLocale
     public string ReasonCoreDied => S("Соединение оборвалось", "The connection dropped");
     public string ReasonNetwork => S("Сеть изменилась", "The network changed");
     public string ReasonTunnel => S("Сервер не отвечает — ищем другой", "The server does not respond — looking for another one");
+    public string ReasonTunnelRestart => S("Соединение не отвечает — перезапускаем", "The connection does not respond — restarting it");
+    public string NoConnectionClick => S("Нет соединения — нажмите, чтобы переподключить", "No connection — click to reconnect");
+    public string NoConnectionClickHint => S("TER три раза пробовал починить связь сам. Нажмите, чтобы переподключить и выбрать другой сервер.", "TER tried three times to fix it by itself. Click to reconnect and pick another server.");
+    public string SwitchedAfterNetwork(string country) => S($"Переключились на {country} — сеть сменилась", $"Switched to {country} — the network changed");
     public string Restored => S("Соединение восстановлено", "Connection restored");
     public string KillSwitchBlocked => S("Защита прервана", "Protection interrupted");
     public string KillSwitchBlockedHint => S("Интернет заблокирован, чтобы ничего не ушло мимо VPN. TER пробует переподключиться каждые 2 минуты. Нажмите кнопку, чтобы отключить защиту и вернуть обычный интернет.",
@@ -354,6 +358,15 @@ public sealed partial class TermitusLocale
     public string SubDaysLeft(int days) => days <= 0
         ? S("меньше суток", "less than a day")
         : S($"осталось {days} {TermitusAccount.RuPlural(days, "день", "дня", "дней")}", $"{days} day{(days == 1 ? "" : "s")} left");
+    public string LeftUnit(TermitusLeft l) => TermitusAccount.LeftUnit(l, IsEn());
+    /// <summary>«осталось 1 день» (chip, trial card).</summary>
+    public string SubLeft(TermitusLeft l) => TermitusAccount.LeftPhrase(l, IsEn());
+    public string ExpiresInLeft(TermitusLeft l) => l.LessThanHour
+        ? S("Истекает меньше чем через час", "Expires in less than an hour")
+        : S($"Истекает через {LeftUnit(l)}", $"Expires in {LeftUnit(l)}");
+    public string BannerExpiringLeft(TermitusLeft l) => l.LessThanHour
+        ? S("Подписка заканчивается меньше чем через час", "Your subscription ends in less than an hour")
+        : S($"Подписка заканчивается через {LeftUnit(l)}", $"Your subscription ends in {LeftUnit(l)}");
     public string SubInactive => S("нет подписки", "no subscription");
     public string SubUnknown => S("подписка", "subscription");
     public string SubSignedOut => S("вход не выполнен", "not signed in");

@@ -31,9 +31,23 @@ case "$SOURCE_URL" in https://*) ;; *) echo "termitus/SOURCE_URL must hold the h
 echo "$SOURCE_URL" | grep -q 'REPLACE-ME' && { [ "${ALLOW_PLACEHOLDER_SOURCE:-}" = 1 ] || { echo "REFUSING: SOURCE_URL is a placeholder"; exit 1; }; }
 
 rm -rf "$PUB"
+# LESSONS 45: no build-machine path (Mac user name) inside the binaries / client logs (CallerFilePath).
+UP_REAL="$(cd "$HERE/upstream/v2rayN" && pwd -P)"
+PATHMAP="$UP_REAL=/src"
+[ "$UP_REAL" = "$HERE/upstream/v2rayN" ] || PATHMAP="$PATHMAP%2C$HERE/upstream/v2rayN=/src"
+# 0.6.5 D-2: pin the bundled cores INSIDE the exe. An elevated TER copies the cores into a protected folder and only runs a copy whose
+# sha256 equals the one compiled in here (see TermitusWinHarden / TermitusCoreHashes).
+SB_EXE="$(ls "$WIN"/s/*/sing-box.exe 2>/dev/null | head -1)"; CRONET="$(ls "$WIN"/s/*/libcronet.dll 2>/dev/null | head -1)"
+[ -f "$WIN/x/xray.exe" ] && [ -f "$WIN/x/wintun.dll" ] && [ -f "$SB_EXE" ] && [ -f "$CRONET" ] || { echo "Windows cores missing in $WIN (cannot pin their checksums)"; exit 1; }
+h() { shasum -a 256 "$1" | cut -d' ' -f1; }
+CORE_HASHES="xray.exe=$(h "$WIN/x/xray.exe");wintun.dll=$(h "$WIN/x/wintun.dll");sing-box.exe=$(h "$SB_EXE");libcronet.dll=$(h "$CRONET")"
+HASH_SRC="$HERE/upstream/v2rayN/ServiceLib/Services/TermitusCoreHashes.cs"
+[ -f "$HASH_SRC" ] || { echo "TermitusCoreHashes.cs missing: run apply-changes.sh first"; exit 1; }
+sed -i '' -E "s|(private const string Raw = \")[^\"]*(\";)|\1$CORE_HASHES\2|" "$HASH_SRC"
+grep -q "xray.exe=[0-9a-f]\{64\};wintun.dll=" "$HASH_SRC" || { echo "failed to embed core hashes"; exit 1; }
 (cd "$HERE/upstream/v2rayN" && DOTNET_ROOT=$HOME/.dotnet "$HOME/.dotnet/dotnet" publish v2rayN.Desktop/v2rayN.Desktop.csproj \
   -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true \
-  -p:Version="$VERSION" -o "$PUB" -nologo -v q) || { echo "dotnet publish failed"; exit 1; }
+  -p:Version="$VERSION" "-p:PathMap=$PATHMAP" -p:Deterministic=true -o "$PUB" -nologo -v q) || { echo "dotnet publish failed"; exit 1; }
 [ -f "$PUB/v2rayN.exe" ] || { echo "no publish output in $PUB (dotnet publish -r win-x64 first)"; exit 1; }
 [ -f "$WIN/x/xray.exe" ] && [ -f "$WIN/x/wintun.dll" ] && [ -f "$WIN"/s/*/sing-box.exe ] || { echo "Windows cores missing in $WIN (BUILD.md «Windows»)"; exit 1; }
 RF="$CORES/rf"

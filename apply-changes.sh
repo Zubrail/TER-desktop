@@ -196,8 +196,11 @@ MWC="$ROOT/v2rayN.Desktop/Views/MainWindow.axaml.cs"
 if [ -f "$MWC" ]; then
   backup "$MWC"; cp "$MWC.bak" "$MWC"
   perl -0777 -pi -e 's{(private bool _blCloseByUser = false;)}{$1\n    private TermitusHomeViewModel\? _termitusHomeVm;}' "$MWC"
-  perl -0777 -pi -e 's{(menuClose\.Click \+= MenuClose_Click;)}{$1\n        btnTermHome.Click += (_, _) => \{ contentTermitusHome.IsVisible = true; dockTermAdvanced.IsVisible = false; _ = _termitusHomeVm?.RefreshStateAsync(); \};\n        menuPromotion.IsVisible = false; // TER: hide upstream third-party promotion link}' "$MWC"
-  perl -0777 -pi -e 's{(this\.OneWayBind\(ViewModel, vm => vm\.StatusBarViewModel, v => v\.contentStatusBarView\.Content\)\.DisposeWith\(disposables\);)}{$1\n\n            _termitusHomeVm = new TermitusHomeViewModel(ViewModel);\n            contentTermitusHome.Content = _termitusHomeVm;\n            _termitusHomeVm.ShowAdvancedRequested\n                .AsObservable()\n                .ObserveOn(RxSchedulers.MainThreadScheduler)\n                .Subscribe(_ => \{ contentTermitusHome.IsVisible = false; dockTermAdvanced.IsVisible = true; \})\n                .DisposeWith(disposables);}' "$MWC"
+  perl -0777 -pi -e 's{(menuClose\.Click \+= MenuClose_Click;)}{$1\n        btnTermHome.Click += (_, _) => \{ Title = ServiceLib.Services.TermitusWinTitle.For(false); contentTermitusHome.IsVisible = true; dockTermAdvanced.IsVisible = false; _ = _termitusHomeVm?.RefreshStateAsync(); \};\n        menuPromotion.IsVisible = false; // TER: hide upstream third-party promotion link}' "$MWC"
+  perl -0777 -pi -e 's{(this\.OneWayBind\(ViewModel, vm => vm\.StatusBarViewModel, v => v\.contentStatusBarView\.Content\)\.DisposeWith\(disposables\);)}{$1\n\n            _termitusHomeVm = new TermitusHomeViewModel(ViewModel);\n            contentTermitusHome.Content = _termitusHomeVm;\n            _termitusHomeVm.ShowAdvancedRequested\n                .AsObservable()\n                .ObserveOn(RxSchedulers.MainThreadScheduler)\n                .Subscribe(_ => \{ Title = ServiceLib.Services.TermitusWinTitle.For(true); contentTermitusHome.IsVisible = false; dockTermAdvanced.IsVisible = true; \})\n                .DisposeWith(disposables);}' "$MWC"
+  # 0.6.5: «TER» only in the simple interface (no «Запущено без прав администратора» for normal users); admin note stays in the advanced one
+  perl -0777 -pi -e 's{Title = \$"\{Utils\.GetVersion\(\)\} - \{\(Utils\.IsAdministrator\(\) \? ResUI\.RunAsAdmin : ResUI\.NotRunAsAdmin\)\}";}{Title = ServiceLib.Services.TermitusWinTitle.For(false); // TER 0.6.5}' "$MWC"
+  [ "$(grep -c 'TermitusWinTitle' "$MWC")" -ge 3 ] || { echo "ОШИБКА: MainWindow.axaml.cs (заголовок окна) не пропатчен"; exit 1; }
   [ "$(grep -c '_termitusHomeVm' "$MWC")" -ge 4 ] || { echo "ОШИБКА: MainWindow.axaml.cs не пропатчен"; exit 1; }
   note "MainWindow.axaml.cs: переключение простой/полный интерфейс"
 fi
@@ -265,6 +268,49 @@ if [ -f "$CM" ] && ! grep -q "TermitusRussiaPreset.SyncBundledGeoFiles" "$CM"; t
   grep -q "TermitusRussiaPreset.SyncBundledGeoFiles" "$CM" || { echo "ОШИБКА: не удалось пропатчить CoreManager"; exit 1; }
   note "CoreManager.Init: geo-файлы из .app обновляются при смене релиза runetfreedom"
 fi
+
+# ---- TER 0.6.5: cores follow the app (upstream never overwrites bin\xray / bin\sing_box in the data dir, so an updated
+# xray/sing-box shipped with a new TER would never take effect). At startup (cores are not running) refresh the changed ones.
+if [ -f "$CM" ] && ! grep -q "TermitusCoreSync.Refresh" "$CM"; then
+  backup "$CM"
+  perl -0777 -pi -e 's{(                TermitusRussiaPreset\.SyncBundledGeoFiles\(fromPath, toPath\); // TER\n)}{$1                TermitusCoreSync.Refresh(fromPath, toPath); // TER 0.6.5\n}' "$CM"
+  grep -q "TermitusCoreSync.Refresh" "$CM" || { echo "ОШИБКА: не удалось пропатчить CoreManager (ядра)"; exit 1; }
+  note "CoreManager.Init: изменившиеся ядра (xray/sing-box) из программы заменяют копии в папке данных"
+fi
+
+# ---- TER 0.6.5: nothing usable on localhost in «Весь трафик» (TUN) mode (TermitusLocalGuard) ----
+# Hooks (all idempotent, each guarded by its own marker):
+#  1. ConfigHandler.GetPreSocksItem: new password + random port for the xray->sing-box chain at every start (TUN chain),
+#     disarmed otherwise. 2. xray mixed inbound: password auth + the random port. 3. xray metrics: not created while armed.
+#  4. sing-box clash_api: random secret; our clients send it (HttpClientHelper handler, traffic websocket ?token=).
+#  5. AppManager: random per-run state ports, GetLocalPort(socks) = the random chain port while armed.
+#  6. Upstream's own socks5 WebProxy calls get the credentials.
+patch_once() { # file marker perl-expression description
+  local f="$1" marker="$2" expr="$3" desc="$4"
+  [ -f "$f" ] || return 0
+  grep -qF "$marker" "$f" && return 0
+  backup "$f"
+  perl -0777 -pi -e "$expr" "$f"
+  grep -qF "$marker" "$f" || { echo "ОШИБКА: не удалось пропатчить: $desc"; exit 1; }
+  note "$desc"
+}
+SVC="$ROOT/ServiceLib/Services"
+AMG="$ROOT/ServiceLib/Manager/AppManager.cs"
+patch_once "$CH" 'TermitusLocalGuard.Disarm' 's{(public static ProfileItem\? GetPreSocksItem\(Config config, ProfileItem node, ECoreType coreType\)\n    \{\n)}{$1        TermitusLocalGuard.Disarm(); // TER 0.6.5: re-armed below only for the TUN chain\n}' "ConfigHandler.GetPreSocksItem: сброс защиты локального порта"
+patch_once "$CH" 'TermitusLocalGuard.Arm' 's{(            itemSocks = new ProfileItem\(\)\n            \{\n                CoreType = ECoreType\.sing_box,\n                ConfigType = EConfigType\.SOCKS,\n                Address = Global\.Loopback,\n                Port = AppManager\.Instance\.GetLocalPort\(EInboundProtocol\.socks\))\n}{            TermitusLocalGuard.Arm(); // TER 0.6.5: fresh password + random port for this start\n$1,\n                Username = TermitusLocalGuard.User!,\n                Password = TermitusLocalGuard.Pass!,\n}' "ConfigHandler.GetPreSocksItem: пароль и случайный порт для цепочки TUN"
+patch_once "$SVC/CoreConfig/V2ray/V2rayInboundService.cs" 'TermitusLocalGuard.ApplyInboundAuth' 's{(            var inbound = BuildInbound\(inboundConf, EInboundProtocol\.socks, true\);\n)}{$1            TermitusLocalGuard.ApplyInboundAuth(inbound.settings); // TER 0.6.5: password on the TUN chain inbound\n}' "V2rayInboundService: пароль на входе цепочки TUN"
+patch_once "$SVC/CoreConfig/V2ray/V2rayInboundService.cs" 'random port while armed' 's{inbound\.port = inItem\.LocalPort \+ \(int\)protocol;}{inbound.port = protocol == EInboundProtocol.socks ? AppManager.Instance.GetLocalPort(protocol) : inItem.LocalPort + (int)protocol; // TER 0.6.5: random port while armed}' "V2rayInboundService: порт входа через GetLocalPort"
+patch_once "$SVC/CoreConfig/V2ray/V2rayStatisticService.cs" 'TermitusLocalGuard.IsArmed' 's{(            _coreConfig\.metrics = metricsObj;)}{            if (!TermitusLocalGuard.IsArmed) // TER 0.6.5: no metrics listener in TUN mode (speed comes from sing-box)\n            {\n    $1\n            }}' "V2rayStatisticService: без metrics в режиме TUN"
+patch_once "$ROOT/ServiceLib/Models/CoreConfigs/SingboxConfig.cs" 'public string? secret' 's{(public class Clash_Api4Sbox\n\{\n    public string\? external_controller \{ get; set; \}\n)}{$1    public string? secret { get; set; }\n}' "SingboxConfig: secret у clash_api"
+patch_once "$SVC/CoreConfig/Singbox/SingboxStatisticService.cs" 'TermitusLocalGuard.ClashSecret' 's{(external_controller = \$"\{Global\.Loopback\}:\{AppManager\.Instance\.StatePort2\}",\n)}{$1                secret = TermitusLocalGuard.ClashSecret, // TER 0.6.5\n}' "SingboxStatisticService: secret для clash_api"
+patch_once "$SVC/Statistics/StatisticsSingboxService.cs" 'ClashWsQuery' 's{/traffic";}{/traffic" + TermitusLocalGuard.ClashWsQuery; // TER 0.6.5}' "StatisticsSingboxService: токен для websocket"
+patch_once "$ROOT/ServiceLib/Helper/HttpClientHelper.cs" 'TermitusClashAuthHandler' 's{new HttpClient\(handler\)}{new HttpClient(new ServiceLib.Services.TermitusClashAuthHandler(handler))}' "HttpClientHelper: Bearer для clash API"
+patch_once "$AMG" 'D-5: random per-run base' 's{return (?:localPort \+ \(int\)protocol|protocol == EInboundProtocol\.socks \? ServiceLib\.Services\.TermitusLocalGuard\.EffectivePort\(localPort\) : localPort \+ \(int\)protocol);(?: // TER 0\.6\.5)?}{return ServiceLib.Services.TermitusLocalGuard.EffectivePort(localPort) + (int)protocol; // TER 0.6.5 (D-5: random per-run base in every mode)}' "AppManager.GetLocalPort: случайный порт цепочки TUN"
+patch_once "$AMG" 'TermitusLocalGuard.EphemeralPort();' 's{_statePort \?\?= Utils\.GetFreePort\(GetLocalPort\(EInboundProtocol\.api\)\);}{_statePort ??= ServiceLib.Services.TermitusLocalGuard.EphemeralPort(); // TER 0.6.5: not a fixed port}' "AppManager.StatePort: случайный порт"
+patch_once "$AMG" 'EphemeralPort(StatePort)' 's{_statePort2 \?\?= Utils\.GetFreePort\(GetLocalPort\(EInboundProtocol\.api2\)\);\n            return _statePort2\.Value \+ \(_config\.TunModeItem\.EnableTun \? 1 : 0\);}{_statePort2 ??= ServiceLib.Services.TermitusLocalGuard.EphemeralPort(StatePort); // TER 0.6.5\n            return _statePort2.Value;}' "AppManager.StatePort2: случайный порт"
+patch_once "$ROOT/ServiceLib/Handler/SysProxy/SysProxyHandler.cs" 'TermitusLocalGuard.IsArmed' 's{(            type = ESysProxyType\.ForcedClear;\n        \}\n)}{$1        // TER 0.6.5: in TUN mode the local chain port carries a password (TermitusLocalGuard); the OS proxy cannot pass it\n        // (macOS asked every app for a "proxy password"). TUN already carries all traffic, so the system proxy is cleared.\n        if (ServiceLib.Services.TermitusLocalGuard.IsArmed && type == ESysProxyType.ForcedChange)\n        {\n            type = ESysProxyType.ForcedClear;\n        }\n}' "SysProxyHandler: в режиме TUN системный прокси не ставится на порт с паролем"
+patch_once "$ROOT/ServiceLib/Handler/ConnectionHandler.cs" 'TermitusLocalGuard.Proxy' 's{new WebProxy\(\$"socks5://\{Global\.Loopback\}:\{port\}"\)}{ServiceLib.Services.TermitusLocalGuard.Proxy(port)}' "ConnectionHandler: SOCKS-прокси с паролем"
+patch_once "$SVC/DownloadService.cs" 'TermitusLocalGuard.Proxy' 's{new WebProxy\(\$"socks5://\{Global\.Loopback\}:\{port\}"\)}{ServiceLib.Services.TermitusLocalGuard.Proxy(port)}' "DownloadService: SOCKS-прокси с паролем"
 
 # ---- TER 0.3: security & reliability (SECURITY.md #2-#4, CHANGES.md 0.3.0) ----
 
@@ -390,11 +436,59 @@ if [ -f "$APPCS" ]; then
   perl -0777 -pi -e 's{(            desktop\.MainWindow = mainWindow;\n)}{$1\n            if (OperatingSystem.IsMacOS())\n            {\n                // TER: macOS menu-bar item is TermitusTray (NSStatusItem); hide the upstream TrayIcon.\n                foreach (var ti in TrayIcon.GetIcons(this) ?? [])\n                {\n                    ti.IsVisible = false;\n                }\n            }\n}' "$APPCS"
   grep -q 'ti.IsVisible = false' "$APPCS" || { echo "ОШИБКА: App.axaml.cs не пропатчен"; exit 1; }
   note "App.axaml.cs: на macOS стандартный TrayIcon скрыт (значок в строке меню — TermitusTray)"
+  # 0.6.5: an unhandled exception leaves ONE redacted local crash file; the next launch asks the user (consent, Android-style)
+  perl -0777 -pi -e 's{(Logging\.SaveLog\("CurrentDomain_UnhandledException", \(Exception\)e\.ExceptionObject\);\n)}{$1            ServiceLib.Services.TermitusCrash.Write((Exception)e.ExceptionObject); // TER 0.6.5\n}; s{(        TaskScheduler\.UnobservedTaskException \+= TaskScheduler_UnobservedTaskException;\n)}{$1        Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, ev) => ServiceLib.Services.TermitusCrash.Write(ev.Exception); // TER 0.6.5\n}' "$APPCS"
+  [ "$(grep -c 'TermitusCrash.Write' "$APPCS")" = "2" ] || { echo "ОШИБКА: App.axaml.cs (отчёт о сбое) не пропатчен"; exit 1; }
+  note "App.axaml.cs: необработанное исключение -> локальный файл отчёта (спросим при следующем запуске)"
 fi
 if [ -f "$MWC" ]; then
   perl -0777 -pi -e 's{(            contentTermitusHome\.Content = _termitusHomeVm;\n)}{$1            TermitusTray.Start(this, _termitusHomeVm); // TER 0.5: macOS menu-bar item\n}' "$MWC"
   grep -q 'TermitusTray.Start(this, _termitusHomeVm)' "$MWC" || { echo "ОШИБКА: MainWindow.axaml.cs (tray) не пропатчен"; exit 1; }
   note "MainWindow.axaml.cs: запуск значка в строке меню"
+fi
+
+# ---- TER 0.6.5 security review D-4: the subscription link lives in the macOS Keychain / Windows DPAPI, not in guiNDB.db ----
+# SubItem.Url becomes a property over a stored reference (column "Url" keeps only the reference), the one SQL query on Url is done in memory,
+# and AppManager migrates the plain links already in the database (+ VACUUM) right after the tables exist.
+SUBM="$ROOT/ServiceLib/Models/Entities/SubItem.cs"
+patch_once "$SUBM" 'TermitusSecretStore' 's{    public string Url \{ get; set; \}\n}{    /// <summary>TER 0.6.5 (D-4): what is stored in the database (a Keychain / DPAPI reference, never the link itself).</summary>\n    [Column("Url")]\n    public string UrlStored { get; set; }\n\n    /// <summary>The real subscription link (resolved from the secret store).</summary>\n    [Ignore]\n    [System.Text.Json.Serialization.JsonIgnore]\n    public string Url\n    {\n        get => ServiceLib.Services.TermitusSecretStore.Reveal(UrlStored)!;\n        set => UrlStored = ServiceLib.Services.TermitusSecretStore.Conceal(UrlStored, value)!;\n    }\n}' "SubItem.Url: ссылка подписки в Keychain / DPAPI (D-4)"
+patch_once "$CH" 'ToListAsync()).Count(e => e.Url == url)' 's{await SQLiteHelper\.Instance\.TableAsync<SubItem>\(\)\.CountAsync\(e => e\.Url == url\);}{(await SQLiteHelper.Instance.TableAsync<SubItem>().ToListAsync()).Count(e => e.Url == url); // TER 0.6.5 (D-4): Url is not a column}' "ConfigHandler.AddSubItem: сравнение ссылок в памяти"
+patch_once "$AMG" 'TermitusSecretStore.MigrateSubItems' 's{(        SQLiteHelper\.Instance\.CreateTable<ProfileGroupItem>\(\);\n#pragma warning restore CS0618\n)}{$1        ServiceLib.Services.TermitusSecretStore.MigrateSubItems(); // TER 0.6.5 (D-4)\n}' "AppManager.InitApp: ссылки подписок уходят из базы в Keychain / DPAPI"
+
+# ---- TER 0.6.5 security review D-2: an elevated Windows TER runs the cores from a protected copy (TermitusWinHarden) ----
+# RunProcess: the core exe (+ wintun.dll / libcronet.dll) is copied to %ProgramData%\TeRMiTuS\core and verified against the hashes compiled
+# into the app; RunProcessNormal: the config comes from a sanitised copy in the protected work folder and the core runs there.
+# All of it is a no-op unless the process is elevated on Windows.
+if [ -f "$CM" ] && ! grep -q "TermitusWinHarden.CoreFor" "$CM"; then
+  backup "$CM"
+  perl -0777 -pi -e 's{(        var fileName = CoreInfoManager\.Instance\.GetCoreExecFile\(coreInfo, out var msg\);\n        if \(fileName\.IsNullOrEmpty\(\)\)\n        \{\n            await UpdateFunc\(false, msg\);\n            return null;\n        \}\n)}{$1        fileName = ServiceLib.Services.TermitusWinHarden.CoreFor(fileName)!; // TER 0.6.5 (D-2): elevated Windows runs a verified protected copy\n        if (fileName.IsNullOrEmpty())\n        {\n            await UpdateFunc(false, ResUI.FailedToRunCore);\n            return null;\n        }\n}' "$CM"
+  perl -0777 -pi -e 's{coreInfo\.AbsolutePath \? Utils\.GetBinConfigPath\(configPath\)\.AppendQuotes\(\) : configPath}{ServiceLib.Services.TermitusWinHarden.ConfigArg(coreInfo.AbsolutePath, configPath)}g; s{(arguments: string\.Format\(coreInfo\.Arguments, [^\n]*\),\n            workingDirectory: )Utils\.GetBinConfigPath\(\),}{$1ServiceLib.Services.TermitusWinHarden.WorkDir(),}' "$CM"
+  [ "$(grep -c "TermitusWinHarden" "$CM")" = "4" ] || { echo "ОШИБКА: CoreManager (защита ядер Windows) не пропатчен: $(grep -c TermitusWinHarden "$CM") вместо 4"; exit 1; }
+  note "CoreManager: на Windows с правами администратора ядра и конфиг берутся из защищённой копии (D-2)"
+fi
+
+# ---- TER 0.6.5: Windows tray icon is owned by TermitusTrayWin (state icon + tooltip) ----
+# Upstream's StatusBarView.RefreshIcon re-skins the tray icon by system-proxy type on every change and would
+# overwrite TER's icon; on Windows only the window icon is refreshed there.
+SBV="$ROOT/v2rayN.Desktop/Views/StatusBarView.axaml.cs"
+if [ -f "$SBV" ]; then
+  backup "$SBV"; cp "$SBV.bak" "$SBV"
+  perl -0777 -pi -e 's{            iconslist\[0\]\.Icon = desktop\.MainWindow\.Icon;\n}{            if (!OperatingSystem.IsWindows())\n            {\n                iconslist[0].Icon = desktop.MainWindow.Icon; // TER: on Windows the tray icon is TermitusTrayWin\n            }\n}' "$SBV"
+  grep -q 'OperatingSystem.IsWindows()' "$SBV" || { echo "ОШИБКА: StatusBarView.axaml.cs (трей Windows) не пропатчен"; exit 1; }
+  note "StatusBarView.axaml.cs: на Windows значок трея не перекрашивается upstream-кодом"
+fi
+
+# ---- TER 0.6.5: Windows auto-update helper mode (TER.exe --ter-apply-update "<appDir>" <oldPid>) ----
+# Must run before the single-instance handle and before any UI/config, so it is the first line of Main.
+PRG="$ROOT/v2rayN.Desktop/Program.cs"
+if [ -f "$PRG" ]; then
+  # applied on top of the Program.cs patch above (no restore from .bak here); idempotent via the grep guard
+  grep -q 'TermitusWinUpdate.TryRunFromArgs' "$PRG" || perl -0777 -pi -e 's{(    public static void Main\(string\[\] args\)\n    \{\n)}{$1        if (ServiceLib.Services.TermitusWinUpdate.TryRunFromArgs(args)) // TER 0.6.5: Windows update helper, no UI\n        {\n            return;\n        }\n\n}' "$PRG"
+  grep -q 'TermitusWinUpdate.TryRunFromArgs' "$PRG" || { echo "ОШИБКА: Program.cs (обновление Windows) не пропатчен"; exit 1; }
+  # D-2: pin the DLL search path before anything else loads a library (System32 + application folder only)
+  grep -q 'TermitusWinHarden.PinDllSearchPath' "$PRG" || perl -0777 -pi -e 's{(    public static void Main\(string\[\] args\)\n    \{\n)}{$1        ServiceLib.Services.TermitusWinHarden.PinDllSearchPath(); // TER 0.6.5 (D-2): no PATH / current-dir DLL planting\n}' "$PRG"
+  grep -q 'TermitusWinHarden.PinDllSearchPath' "$PRG" || { echo "ОШИБКА: Program.cs (DLL search path) не пропатчен"; exit 1; }
+  note "Program.cs: режим помощника обновления Windows в самом начале Main"
 fi
 
 # ---- TER 0.5: local logs are masked (tokens, proxy links, UUIDs, secrets) and kept 3 days ----

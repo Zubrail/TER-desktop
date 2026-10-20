@@ -13,7 +13,8 @@ namespace ServiceLib.Services;
 
 public sealed record TermitusLoginStartRequest(
     [property: JsonPropertyName("device_name")] string DeviceName,
-    [property: JsonPropertyName("platform")] string Platform);
+    [property: JsonPropertyName("platform")] string Platform,
+    [property: JsonPropertyName("trial_code"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TrialCode = null);
 
 public sealed record TermitusLoginStartResponse(
     [property: JsonPropertyName("code")] string? Code,
@@ -23,7 +24,9 @@ public sealed record TermitusLoginStartResponse(
 
 public sealed record TermitusLoginPollResponse(
     [property: JsonPropertyName("status")] string? Status,
-    [property: JsonPropertyName("subscription_url")] string? SubscriptionUrl);
+    [property: JsonPropertyName("subscription_url")] string? SubscriptionUrl,
+    [property: JsonPropertyName("trial_attached")] bool? TrialAttached = null,
+    [property: JsonPropertyName("trial_note")] string? TrialNote = null);
 
 public sealed record TermitusSupportPostRequest(
     [property: JsonPropertyName("text")] string Text);

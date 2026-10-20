@@ -16,6 +16,8 @@ Env: PLANS=404|500, PENDING_POLLS=3, PAY_RESULT=paid|failed|expired, EXPIRED=1 (
      SUPPORT_POST=403|404|422|429|500 (every support POST answers with it), SUPPORT_FAIL_FIRST=1 (first POST 503, then ok),
      ACCOUNT_GUEST=1 (every /account/ call answers 403 = this device is not a manager), INVITE_FREE=1 (invite without a payment step),
      INVITE_BALANCE=150 (balance for the paid-device check; below 50 -> invite answers 402), ACCOUNT_EMPTY=1 (no payments, no referrals yet), ACCOUNT_MANY=1 (14 payments),
+     TRIAL_NOTE=code_unavailable|cooldown|error (login poll with a trial code answers trial_note instead of trial_attached),
+     TRIAL=ip|busy|subnet|install (POST /app/trial answers 429 + X-Trial-Reason) or 400|422|503; default = 200 with a 2-day trial,
      POST_LOG=/path (support POST bodies), REQ_LOG=/path (GET /app/* requests: path, User-Agent, header names), APP_DIR=/path (serves latest.json + files under /app/), WITH_H2=0 (no Hysteria2 entries)
 """
 import base64, datetime, json, os, sys, threading, time
@@ -25,6 +27,7 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 18080
 TOK = "TESTTOKEN"
 DAYS = -2 if os.environ.get("EXPIRED") == "1" else int(os.environ.get("EXPIRES_IN_DAYS", "20"))
 polls = {}
+login = {}
 
 def vless(name, port):
     return f"vless://11111111-2222-3333-4444-555555555555@127.0.0.1:{port}?security=none&type=tcp&encryption=none#{name}"
@@ -155,6 +158,15 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, json.dumps({"status": st}))
         if p == base + "/support":
             return self.send(200, json.dumps(chat))
+        if p.startswith("/app/login/poll/"):
+            login["polls"] += 1
+            if login["polls"] <= 2: return self.send(202, json.dumps({"status": "pending"}))
+            body = {"status": "ok", "subscription_url": f"http://127.0.0.1:{PORT}/subscription/{TOK}"}
+            if login.get("trial_code"):  # TRIAL_NOTE=code_unavailable|cooldown|error -> trial_note; default = attached
+                note = os.environ.get("TRIAL_NOTE")
+                if note: body["trial_note"] = note
+                else: body["trial_attached"] = True
+            return self.send(200, json.dumps(body))
         if p.startswith("/app/") and os.environ.get("APP_DIR"):
             fn = os.path.basename(p)
             path = os.path.join(os.environ["APP_DIR"], fn)
@@ -177,6 +189,32 @@ class H(BaseHTTPRequestHandler):
             if os.environ.get("POST_LOG"):
                 with open(os.environ["POST_LOG"], "a") as f: f.write(json.dumps({"text": text}, ensure_ascii=False) + "\n")
             return self.send(201, json.dumps(msg))
+        if p == "/app/login/start":
+            body = json.loads(raw or b"{}")
+            login["code"] = "LOGINCODE1234"; login["polls"] = 0; login["trial_code"] = body.get("trial_code")
+            if os.environ.get("REQ_LOG"):
+                with open(os.environ["REQ_LOG"], "a") as f:  # field names only
+                    f.write(json.dumps({"path": p, "fields": sorted(body.keys()), "has_trial_code": bool(body.get("trial_code"))}) + "\n")
+            return self.send(200, json.dumps({"code": login["code"], "bot_url": "https://t.me/TErpiUsis_bot?start=login_LOGINCODE1234", "expires_in": 300, "poll_interval": 1}))
+        if p == "/app/trial":
+            # 0.6.5: in-app trial. TRIAL=ip|busy|subnet|install (429 + X-Trial-Reason), 400|422|503 (plain status); default 200.
+            body = json.loads(raw or b"{}")
+            if os.environ.get("REQ_LOG"):
+                with open(os.environ["REQ_LOG"], "a") as f:  # field names only, never the install id
+                    f.write(json.dumps({"path": p, "fields": sorted(body.keys()), "consent": body.get("consent"), "platform": body.get("platform"), "install_id_len": len(body.get("install_id") or "")}) + "\n")
+            mode = os.environ.get("TRIAL", "ok")
+            texts = {"ip": "С вашего адреса сегодня уже брали пробный доступ. Возьмите его в нашем Telegram-боте.",
+                     "busy": "Сегодня пробный доступ уже раздан. Загляните завтра или возьмите его в нашем Telegram-боте.",
+                     "subnet": "С вашей сети сегодня уже брали пробный доступ. Возьмите его в нашем Telegram-боте.",
+                     "install": "Пробный период на этом устройстве уже брали — возьмите его в нашем Telegram-боте."}
+            if mode in texts:
+                return self.send(429, json.dumps({"detail": texts[mode]}), headers={"X-Trial-Reason": mode})
+            if mode in ("400", "422", "503"):
+                return self.send(int(mode), json.dumps({"detail": "x"}))
+            if not body.get("consent"): return self.send(400, json.dumps({"detail": "consent"}))
+            exp = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=2)
+            return self.send(200, json.dumps({"subscription_url": f"http://127.0.0.1:{PORT}/subscription/{TOK}", "code": "TRIALCODE1234", "days": 2,
+                                              "expires_at": exp.strftime("%Y-%m-%dT%H:%M:%SZ")}))
         if p == f"/subscription/{TOK}/pay":
             return self.send(201, json.dumps({"payment_id": f"pay{int(time.time())}", "pay_url": "https://termitus.online/pay/test"}))
         self.send(404, "{}")

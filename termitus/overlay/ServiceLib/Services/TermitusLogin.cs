@@ -16,7 +16,10 @@ public enum TermitusPollKind
     Failed,
 }
 
-public sealed record TermitusPollOutcome(TermitusPollKind Kind, string? SubscriptionUrl = null, TimeSpan? RetryAfter = null)
+/// <param name="TrialAttached">0.6.5: the trial code sent at /start was redeemed for this Telegram account (trial = 7 days total).</param>
+/// <param name="TrialNote">0.6.5: "code_unavailable" | "cooldown" | "error": the code could not be attached (the login itself still succeeded).</param>
+public sealed record TermitusPollOutcome(TermitusPollKind Kind, string? SubscriptionUrl = null, TimeSpan? RetryAfter = null,
+    bool TrialAttached = false, string? TrialNote = null)
 {
     public bool IsFinal => Kind is not (TermitusPollKind.Pending or TermitusPollKind.Retry);
 }
@@ -101,9 +104,17 @@ public static class TermitusLogin
         return url != null
             && url.Length <= 2048
             && Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u)
-            && u.Scheme == Uri.UriSchemeHttps
+            // test instance only: the fake backend on this very computer speaks plain http
+            && (u.Scheme == Uri.UriSchemeHttps || (u.Scheme == Uri.UriSchemeHttp && TermitusTestHooks.IsTestInstance && u.IsLoopback))
             && u.UserInfo.Length == 0
             && u.Host.Length > 0;
+    }
+
+    /// <summary>The note values the backend may send; anything else is treated as "error".</summary>
+    public static string? NormalizeTrialNote(string? note)
+    {
+        var n = (note ?? string.Empty).Trim().ToLowerInvariant();
+        return n.Length == 0 ? null : n is "code_unavailable" or "cooldown" ? n : "error";
     }
 
     /// <summary>Maps one poll answer (HTTP status null = no answer) to what the flow does next.</summary>
@@ -145,7 +156,7 @@ public static class TermitusLogin
                 }
                 if (st == "ok" && IsAcceptableSubscriptionUrl(p!.SubscriptionUrl))
                 {
-                    return new(TermitusPollKind.Ok, p.SubscriptionUrl!.Trim());
+                    return new(TermitusPollKind.Ok, p.SubscriptionUrl!.Trim(), null, p.TrialAttached == true, NormalizeTrialNote(p.TrialNote));
                 }
                 return new(TermitusPollKind.Failed);
 
@@ -216,9 +227,10 @@ public static class TermitusLogin
     #region Network
 
     /// <summary>POST /app/login/start. Direct connection (first run: nothing is connected).</summary>
-    public static async Task<TermitusLoginStart> StartAsync(CancellationToken ct)
+    public static async Task<TermitusLoginStart> StartAsync(CancellationToken ct, string? trialCode = null)
     {
-        var req = new TermitusLoginStartRequest(DeviceName(Environment.MachineName), PlatformName());
+        // trialCode (0.6.5): the stored trial's gift code; the bot redeems it for the Telegram account that confirms.
+        var req = new TermitusLoginStartRequest(DeviceName(Environment.MachineName), PlatformName(), trialCode.IsNullOrEmpty() ? null : trialCode);
         var res = await TermitusHttp.PostJsonAsync($"{ApiBase}/app/login/start", req, null, RequestTimeout, ct);
         Logging.SaveLog($"{_tag}: start -> {res.Status?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no answer"}");
         if (res.Status == null || res.Status >= 500 || res.Status is 408 or 429)

@@ -310,6 +310,36 @@ public static class TermitusAccount
         ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
     /// <summary>"14 ноября" (or "14 ноября 2027" when not this year); EN: "November 14".</summary>
+    /// <summary>
+    /// ONE rule for «how much is left», used by the Home banner, the sidebar chip, the status title and the trial card (0.6.5):
+    /// whole hours, rounded DOWN; 24 h or more are shown as whole days (also rounded down), under an hour as «less than an hour».
+    /// Null when the moment has passed.
+    /// </summary>
+    public static TermitusLeft? Left(DateTimeOffset until, DateTimeOffset now)
+    {
+        var t = until - now;
+        if (t <= TimeSpan.Zero)
+        {
+            return null;
+        }
+        var h = (int)Math.Floor(t.TotalHours);
+        return h >= 24 ? new TermitusLeft(h / 24, false, false)
+            : h >= 1 ? new TermitusLeft(h, true, false)
+            : new TermitusLeft(0, true, true);
+    }
+
+    /// <summary>«5 часов» / «1 день» / «меньше часа».</summary>
+    public static string LeftUnit(TermitusLeft l, bool en) => l.LessThanHour
+        ? (en ? "less than an hour" : "меньше часа")
+        : l.Hours
+            ? (en ? $"{l.Value} hour{(l.Value == 1 ? "" : "s")}" : $"{l.Value} {RuPlural(l.Value, "час", "часа", "часов")}")
+            : (en ? $"{l.Value} day{(l.Value == 1 ? "" : "s")}" : $"{l.Value} {RuPlural(l.Value, "день", "дня", "дней")}");
+
+    /// <summary>«осталось 1 день» / «1 day left» / «осталось меньше часа».</summary>
+    public static string LeftPhrase(TermitusLeft l, bool en) => l.LessThanHour
+        ? (en ? "less than an hour left" : "осталось меньше часа")
+        : (en ? $"{LeftUnit(l, true)} left" : $"осталось {LeftUnit(l, false)}");
+
     public static string FormatDate(DateTimeOffset when, DateTimeOffset now, bool en)
     {
         var d = when.ToLocalTime();
@@ -614,7 +644,7 @@ public static class TermitusAccount
         string accept, int? socksPort, CancellationToken ct)
     {
         IWebProxy?[] routes = socksPort is > 0
-            ? [new WebProxy($"socks5://{Global.Loopback}:{socksPort}"), null]
+            ? [TermitusLocalGuard.Proxy(socksPort.Value), null]
             : [null];
         foreach (var proxy in routes)
         {
@@ -778,6 +808,9 @@ public enum TermitusAccountState
     Expired,
     Inactive,
 }
+
+/// <summary>Time left: <c>Value</c> whole days, or whole hours when <c>Hours</c>; <c>LessThanHour</c> under 60 minutes.</summary>
+public readonly record struct TermitusLeft(int Value, bool Hours, bool LessThanHour);
 
 public sealed record TermitusDeviceRow(string Name, string Platform, bool IsActive)
 {

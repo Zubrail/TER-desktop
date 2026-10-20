@@ -126,7 +126,7 @@ public static class TermitusLive
         {
             using var handler = new SocketsHttpHandler
             {
-                Proxy = new WebProxy($"socks5://{Global.Loopback}:{socksPort}"),
+                Proxy = TermitusLocalGuard.Proxy(socksPort),
                 UseProxy = true,
                 ConnectTimeout = TimeSpan.FromSeconds(5),
             };

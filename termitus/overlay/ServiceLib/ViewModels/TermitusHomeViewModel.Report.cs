@@ -28,6 +28,8 @@ public partial class TermitusHomeViewModel
     [Reactive] public partial bool ReportHasCheck { get; set; }
     [Reactive] public partial bool ReportCheckMissing { get; set; }
     [Reactive] public partial bool ReportCheckRunning { get; set; }
+    /// <summary>0.6.5: the sheet was opened by a crash file from the last run (consent, nothing is sent by itself).</summary>
+    [Reactive] public partial bool ReportIsCrash { get; set; }
 
     public ObservableCollection<TermitusReportChip> ReportChips { get; } = [];
 
@@ -132,6 +134,7 @@ public partial class TermitusHomeViewModel
         var sub = await CurrentSubAsync();
         OnUi(() =>
         {
+            ReportIsCrash = false;
             ReportText = text;
             ReportAttach = attach;
             HasReportError = false;
@@ -146,11 +149,52 @@ public partial class TermitusHomeViewModel
         });
     }
 
+    /// <summary>Next launch after a crash: ask (never send by itself). Windows and macOS; needs a subscription for the support chat.</summary>
+    public async Task AskAboutCrashAsync()
+    {
+        var crash = TermitusCrash.Pending();
+        if (crash == null)
+        {
+            return;
+        }
+        if (await CurrentSubAsync() == null)
+        {
+            TermitusCrash.Delete(); // no support chat without an account: nothing to offer
+            return;
+        }
+        _reportChip = "other";
+        OnUi(() =>
+        {
+            ReportText = crash;
+            ReportAttach = false; // the crash text is the whole message
+            HasReportError = false;
+            ReportError = string.Empty;
+            ReportIsCrash = true;
+            RebuildReportChips();
+            SetReportStage(ReportStage.Editing);
+            ShowReport = true;
+            RefreshReportPreview();
+        });
+    }
+
     private void CloseReport()
     {
         if (ReportSending)
         {
             return;
+        }
+        if (ReportIsCrash)
+        {
+            // either answer deletes the crash file; closing without sending drops the text too
+            TermitusCrash.Delete();
+            ReportIsCrash = false;
+            if (!ReportSent && !ReportOffline)
+            {
+                ReportText = string.Empty;
+                _reportChip = null;
+                ShowReport = false;
+                return;
+            }
         }
         if (!ReportSent && (ReportText.Trim().Length > 0))
         {
@@ -247,6 +291,7 @@ public partial class TermitusHomeViewModel
         {
             case TermitusSendKind.Ok:
                 TermitusReportDraft.Delete();
+                TermitusCrash.Delete();
                 OnUi(() => SetReportStage(ReportStage.Sent));
                 _ = Bg(() => PollSupportAsync(full: !_supportFullLoaded));
                 break;

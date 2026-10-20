@@ -23,7 +23,8 @@ public sealed record TermitusTrayState(
     IReadOnlyList<(string Key, string Title, bool Selected)> Countries,
     bool SysProxyClear,
     bool SysProxySet,
-    bool SysProxyNothing);
+    bool SysProxyNothing,
+    bool NoConnection = false);
 
 /// <summary>
 /// 0.5 tray: the right-click menu is short on purpose: Connect, Country ›, Open TER, Report a problem, Quit.
@@ -49,7 +50,7 @@ public static class TermitusTrayMenu
     {
         var items = new List<TermitusTrayItem>
         {
-            new(s.Connected ? loc.TrayDisconnect : loc.TrayConnect, TermitusTrayKind.Action, Connect,
+            new(s.NoConnection ? loc.NoConnectionClick : s.Connected ? loc.TrayDisconnect : loc.TrayConnect, TermitusTrayKind.Action, Connect,
                 Enabled: s.HasSubscription && !s.Connecting),
         };
 
@@ -77,6 +78,19 @@ public static class TermitusTrayMenu
         items.Add(new(loc.TrayQuit, TermitusTrayKind.Action, Quit));
         return items;
     }
+
+    /// <summary>Icon state of the tray: "busy" while connecting, "warn" when attention is needed, "on", else "off".</summary>
+    public static string IconState(bool connecting, bool warn, bool connected) =>
+        connecting ? "busy" : warn ? "warn" : connected ? "on" : "off";
+
+    /// <summary>Tooltip text for an <see cref="IconState"/> value.</summary>
+    public static string Tooltip(string iconState, TermitusLocale loc) => iconState switch
+    {
+        "on" => loc.TrayTooltipOn,
+        "busy" => loc.TrayTooltipBusy,
+        "warn" => loc.TrayTooltipWarn,
+        _ => loc.TrayTooltipOff,
+    };
 
     /// <summary>Flat dump for logs/tests: "Подключить | Страна › [Авто✓, Нидерланды] | ...".</summary>
     public static string Describe(IEnumerable<TermitusTrayItem> items) =>

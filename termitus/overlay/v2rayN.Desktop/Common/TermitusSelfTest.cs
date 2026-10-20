@@ -46,6 +46,8 @@ namespace v2rayN.Desktop.Common;
 ///   acc-friends      scroll to the «Друзья» card   acc-reward:money|days   acc-payments   scroll to «Оплаты»   acc-payments-all   expand
 ///   acc-rotate-ask / acc-rotate   «Сменить ссылку» sheet / confirm   acc-relogin   «Войти заново» (guest card)   acc-close   close the sheet
 ///   scroll-acct:FRACTION   scroll the account page (0 top .. 1 bottom)   dump3:LABEL   log the Account 2.0 state
+///   0.6.5: trial-consent[:0|1] tick the consent box   trial   «Попробовать бесплатно»   trial-bot   «Открыть бота» (refusal card)   trial-bind   «Привязать к Telegram» (login with the trial code)
+///   invite   «Пригласить друга» on Home (opens the QR sheet)   acc-close closes it   dump4:LABEL   log the trial / invite state
 ///   quit             close the app
 /// </summary>
 internal static class TermitusSelfTest
@@ -110,12 +112,38 @@ internal static class TermitusSelfTest
                     Exec(vm.LoginTelegramCmd);
                     break;
 
+                case "trial-consent":
+                    vm.TrialConsent = arg != "0";
+                    await Task.Delay(200);
+                    break;
+
+                case "trial":
+                    Exec(vm.TrialStartCmd);
+                    break;
+
+                case "trial-bind":
+                    Exec(vm.TrialBindCmd);
+                    break;
+
+                case "trial-bot":
+                    Exec(vm.TrialBotCmd);
+                    break;
+
+                case "invite":
+                    Exec(vm.InviteOpenCmd);
+                    await Task.Delay(1200);
+                    break;
+
+                case "dump4":
+                    Log($"dump4 {arg}: {vm.DebugTrialState()}");
+                    break;
+
                 case "cancel-login":
                     Exec(vm.CancelLoginCmd);
                     break;
 
                 case "import":
-                    vm.SubscriptionInput = Environment.GetEnvironmentVariable("TER_TEST_IMPORT_URL") ?? string.Empty;
+                    vm.SubscriptionInput = TermitusTestHooks.Env("TER_TEST_IMPORT_URL") ?? string.Empty;
                     Exec(vm.ImportSubscriptionCmd);
                     break;
 

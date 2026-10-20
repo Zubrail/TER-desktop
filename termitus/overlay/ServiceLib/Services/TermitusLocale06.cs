@@ -121,6 +121,8 @@ public sealed partial class TermitusLocale
     public string UpdateManualMac => S("Скачано и проверено. Открылось окно с TER — перетащите его в «Программы» с заменой, затем запустите заново.",
         "Downloaded and verified. A window with TER opened — drag it into Applications, replacing the old one, then start it again.");
     public string UpdateManualWin(string path) => S("Скачано и проверено. Закройте TER и запустите скачанный файл.", "Downloaded and verified. Close TER and run the downloaded file.");
+    public string UpdateManualWinNoWrite => S("Скачано и проверено, но в эту папку TER не может записать сам. Закройте TER, распакуйте скачанный архив поверх старой папки (или в любое другое место) и запустите заново.",
+        "Downloaded and verified, but TER cannot write to its own folder. Close TER, unpack the downloaded archive over the old folder (or anywhere else) and start it again.");
     public string UpdateRetry => S("Повторить", "Try again");
     public string UpdatesSection => S("Обновления", "Updates");
     public string AutoUpdateTitle => S("Проверять обновления автоматически", "Check for updates automatically");

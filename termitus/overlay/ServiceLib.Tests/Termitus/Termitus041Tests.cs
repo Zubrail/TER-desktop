@@ -131,4 +131,27 @@ public class Termitus041Tests
         await Assert.That(TermitusLogin.ApiBase).IsEqualTo("https://termitus.online");
         await Assert.That(TermitusTestHooks.NoOpen).IsFalse();
     }
+
+    [Test]
+    public async Task TestHooks_ApiBaseNeedsATestInstanceAndSafeScheme()
+    {
+        // D-6: a bare TER_TEST_API_BASE must never redirect login traffic
+        await Assert.That(TermitusTestHooks.SafeApiBase(null, "https://evil.example")).IsNull();
+        await Assert.That(TermitusTestHooks.SafeApiBase("t1", "http://evil.example")).IsNull();
+        await Assert.That(TermitusTestHooks.SafeApiBase("t1", "ftp://x")).IsNull();
+        await Assert.That(TermitusTestHooks.SafeApiBase("t1", "not a url")).IsNull();
+        await Assert.That(TermitusTestHooks.SafeApiBase("t1", "https://stage.example")).IsEqualTo("https://stage.example");
+        await Assert.That(TermitusTestHooks.SafeApiBase("t1", "http://127.0.0.1:9")).IsEqualTo("http://127.0.0.1:9");
+    }
+
+    [Test]
+    public async Task TestHooks_CompiledOutOfRelease()
+    {
+#if DEBUG
+        await Assert.That(TermitusTestHooks.Compiled).IsTrue();
+#else
+        await Assert.That(TermitusTestHooks.Compiled).IsFalse();
+        await Assert.That(TermitusTestHooks.Env("PATH")).IsNull();
+#endif
+    }
 }

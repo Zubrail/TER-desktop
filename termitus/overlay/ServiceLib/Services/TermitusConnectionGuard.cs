@@ -13,6 +13,9 @@ public enum TermitusTrigger
 
     /// <summary>After a network change the core is alive but nothing passes through it.</summary>
     TunnelDead,
+
+    /// <summary>The Mac woke from sleep (the clock jumped): connections made before are stale.</summary>
+    Woke,
 }
 
 public enum TermitusGuardAction
@@ -24,6 +27,12 @@ public enum TermitusGuardAction
 
     /// <summary>Fast retries are used up while the core is dead: go to the loud "interrupted" state.</summary>
     GiveUp,
+
+    /// <summary>Wake / network change settled: quietly probe the tunnel first; restart only if the probe fails.</summary>
+    CheckHealth,
+
+    /// <summary>The core is alive but 3 automatic fixes within 5 min did not help: say so, wait for the user's click.</summary>
+    NoConnection,
 }
 
 public readonly record struct TermitusGuardDecision(TermitusGuardAction Action, TermitusTrigger Trigger, int Attempt, bool Repick)
@@ -36,25 +45,31 @@ public readonly record struct TermitusGuardDecision(TermitusGuardAction Action, 
 /// No I/O, no clock of its own: the caller feeds observations every tick and
 /// gets back what to do, so the anti-loop rules are unit-tested.
 ///
-/// Rules:
-///  - core death is confirmed only on <see cref="DeadTicksToConfirm"/> consecutive
-///    ticks (house debounce pattern; also hides the gap inside an upstream Reload);
-///  - a network change acts only after the fingerprint has been stable for
-///    <see cref="NetworkSettle"/> and the machine is online (Wi-Fi hand-over
-///    produces several changes in a row; offline there is nothing to fix);
-///  - attempts back off 5s/15s/30s/60s; the 2nd and later attempts (and a dead
-///    tunnel) re-test the servers and re-pick via TermitusLocations;
-///  - after <see cref="MaxAttempts"/> fast attempts with the core still dead:
-///    one GiveUp, then a slow retry every <see cref="SlowRetry"/> (never a loop);
-///  - with the core alive, network/probe-triggered restarts stop at MaxAttempts
-///    (no restart storms on a flapping Wi-Fi) and never cause a GiveUp;
-///  - the counter resets after <see cref="HealthyReset"/> of a live core.
+/// Core DEAD:
+///  - death is confirmed only on <see cref="DeadTicksToConfirm"/> consecutive ticks
+///    (house debounce pattern; also hides the gap inside an upstream Reload);
+///  - attempts back off 5s/15s/30s/60s; the 2nd and later attempts re-test the servers and re-pick;
+///  - after <see cref="MaxAttempts"/> fast attempts: one GiveUp, then a slow retry every
+///    <see cref="SlowRetry"/> (never a loop); the counter resets after <see cref="HealthyReset"/> of a live core.
+///
+/// Core ALIVE but the network changed or the Mac woke (lesson 44 follow-up):
+///  - the event acts only after it has been stable for <see cref="NetworkSettle"/> / <see cref="WakeSettle"/>
+///    and the machine is online (offline there is nothing to fix);
+///  - it only asks for a quiet health probe (<see cref="TermitusGuardAction.CheckHealth"/>); the caller reports the
+///    result with <see cref="ReportProbe"/>; a good tunnel is never restarted;
+///  - a failed probe restarts the core: fix 1 keeps the server, fix 2 and 3 re-pick it ("after 2 failures switch");
+///  - at most <see cref="MaxAliveAttempts"/> automatic fixes per <see cref="AliveWindow"/>; then ONE
+///    <see cref="TermitusGuardAction.NoConnection"/> and silence until the user clicks (Reset) or a later probe passes.
 /// </summary>
 public sealed class TermitusReconnectPolicy
 {
     public const int DeadTicksToConfirm = 2;
     public const int MaxAttempts = 5;
+    public const int MaxAliveAttempts = 3;
     public static readonly TimeSpan NetworkSettle = TimeSpan.FromSeconds(4);
+    public static readonly TimeSpan WakeSettle = TimeSpan.FromSeconds(2);
+    public static readonly TimeSpan CheckGap = TimeSpan.FromSeconds(5);
+    public static readonly TimeSpan AliveWindow = TimeSpan.FromMinutes(5);
     public static readonly TimeSpan HealthyReset = TimeSpan.FromMinutes(2);
     public static readonly TimeSpan SlowRetry = TimeSpan.FromMinutes(2);
 
@@ -64,25 +79,35 @@ public sealed class TermitusReconnectPolicy
 
     private string? _fingerprint;
     private DateTime? _networkChangedAt;
+    private DateTime? _wakeAt;
     private bool _probeFailed;
     private int _deadTicks;
     private int _attempts;
     private DateTime _nextAllowed = DateTime.MinValue;
+    private DateTime _nextCheck = DateTime.MinValue;
     private DateTime _lastAttemptAt = DateTime.MinValue;
+    private readonly List<DateTime> _aliveFixes = [];
 
     public int Attempts => _attempts;
     public bool GaveUp { get; private set; }
 
-    /// <summary>New session (user pressed Connect/Disconnect): forget history, keep the network baseline.</summary>
+    /// <summary>The core is alive but the automatic fixes are used up; waiting for the user.</summary>
+    public bool NoConnection { get; private set; }
+
+    /// <summary>New session (user pressed Connect/Disconnect/«переподключить»): forget history, keep the network baseline.</summary>
     public void Reset()
     {
         _networkChangedAt = null;
+        _wakeAt = null;
         _probeFailed = false;
         _deadTicks = 0;
         _attempts = 0;
         _nextAllowed = DateTime.MinValue;
+        _nextCheck = DateTime.MinValue;
         _lastAttemptAt = DateTime.MinValue;
+        _aliveFixes.Clear();
         GaveUp = false;
+        NoConnection = false;
     }
 
     public void ObserveNetwork(string fingerprint, DateTime now)
@@ -99,10 +124,18 @@ public sealed class TermitusReconnectPolicy
         }
     }
 
-    /// <summary>Result of the connectivity probe run after a network-change restart.</summary>
+    /// <summary>The Mac woke from sleep (see <see cref="TermitusWakeDetector"/>).</summary>
+    public void ObserveWake(DateTime now) => _wakeAt = now;
+
+    /// <summary>Result of a connectivity probe (after CheckHealth or after a restart).</summary>
     public void ReportProbe(bool ok)
     {
-        if (!ok)
+        if (ok)
+        {
+            _probeFailed = false;
+            NoConnection = false;
+        }
+        else
         {
             _probeFailed = true;
         }
@@ -113,8 +146,9 @@ public sealed class TermitusReconnectPolicy
         _deadTicks = coreAlive ? 0 : _deadTicks + 1;
         var coreDead = _deadTicks >= DeadTicksToConfirm;
         var networkSettled = _networkChangedAt is { } changedAt && now - changedAt >= NetworkSettle;
+        var wokeSettled = _wakeAt is { } wokeAt && now - wokeAt >= WakeSettle;
 
-        if (!coreDead && !networkSettled && !_probeFailed)
+        if (!coreDead && !networkSettled && !wokeSettled && !_probeFailed)
         {
             if (_attempts > 0 && coreAlive && now - _lastAttemptAt >= HealthyReset)
             {
@@ -124,24 +158,19 @@ public sealed class TermitusReconnectPolicy
             return TermitusGuardDecision.None;
         }
 
+        if (!coreDead)
+        {
+            return NextWithLiveCore(networkUp, networkSettled, wokeSettled, now);
+        }
+
         if (!networkUp || now < _nextAllowed)
         {
             return TermitusGuardDecision.None; // keep the pending reason for later
         }
 
-        var trigger = coreDead ? TermitusTrigger.CoreDied
-            : _probeFailed ? TermitusTrigger.TunnelDead
-            : TermitusTrigger.NetworkChanged;
-
+        const TermitusTrigger trigger = TermitusTrigger.CoreDied;
         if (_attempts >= MaxAttempts)
         {
-            if (!coreDead)
-            {
-                // Core is alive: stop restarting it for network reasons.
-                _networkChangedAt = null;
-                _probeFailed = false;
-                return TermitusGuardDecision.None;
-            }
             _nextAllowed = now + SlowRetry;
             if (!GaveUp)
             {
@@ -155,15 +184,86 @@ public sealed class TermitusReconnectPolicy
         _attempts++;
         _nextAllowed = now + Backoff[Math.Min(_attempts - 1, Backoff.Count - 1)];
         MarkAttempt(now);
-        return new(TermitusGuardAction.Recover, trigger, _attempts, _attempts >= 2 || trigger == TermitusTrigger.TunnelDead);
+        return new(TermitusGuardAction.Recover, trigger, _attempts, _attempts >= 2);
+    }
+
+    private TermitusGuardDecision NextWithLiveCore(bool networkUp, bool networkSettled, bool wokeSettled, DateTime now)
+    {
+        if (!networkUp)
+        {
+            return TermitusGuardDecision.None; // keep the pending reason for later
+        }
+
+        if (!_probeFailed)
+        {
+            // An event settled, nothing known to be wrong yet: ask for a quiet probe (rate-limited).
+            if (now < _nextCheck)
+            {
+                return TermitusGuardDecision.None;
+            }
+            _nextCheck = now + CheckGap;
+            var trigger = wokeSettled ? TermitusTrigger.Woke : TermitusTrigger.NetworkChanged;
+            _networkChangedAt = null;
+            _wakeAt = null;
+            return new(TermitusGuardAction.CheckHealth, trigger, 0, false);
+        }
+
+        // The probe failed: restart (fix 1), switch server (fix 2, 3), or give the decision to the user.
+        _aliveFixes.RemoveAll(t => now - t >= AliveWindow);
+        if (_aliveFixes.Count >= MaxAliveAttempts)
+        {
+            _probeFailed = false;
+            _networkChangedAt = null;
+            _wakeAt = null;
+            if (NoConnection)
+            {
+                return TermitusGuardDecision.None;
+            }
+            NoConnection = true;
+            return new(TermitusGuardAction.NoConnection, TermitusTrigger.TunnelDead, _aliveFixes.Count, false);
+        }
+        if (now < _nextAllowed)
+        {
+            return TermitusGuardDecision.None;
+        }
+        _aliveFixes.Add(now);
+        var fix = _aliveFixes.Count;
+        _nextAllowed = now + Backoff[Math.Min(fix - 1, Backoff.Count - 1)];
+        _lastAttemptAt = now;
+        _networkChangedAt = null;
+        _wakeAt = null;
+        _probeFailed = false; // the caller probes again after the restart and reports
+        return new(TermitusGuardAction.Recover, TermitusTrigger.TunnelDead, fix, fix >= 2);
     }
 
     private void MarkAttempt(DateTime now)
     {
         _lastAttemptAt = now;
         _networkChangedAt = null;
+        _wakeAt = null;
         _probeFailed = false;
         _deadTicks = 0; // the restarted core gets the full debounce again
+    }
+}
+
+/// <summary>
+/// Notices that the machine slept: the guard timer ticks every ~2 s, so a gap of more than
+/// <see cref="Threshold"/> between two observations means the process was suspended (lid closed,
+/// idle sleep). Wall clock on purpose: it advances during sleep, the monotonic one may not.
+/// A manual clock change looks the same, which is harmless (one quiet probe).
+/// </summary>
+public sealed class TermitusWakeDetector
+{
+    public static readonly TimeSpan Threshold = TimeSpan.FromSeconds(10);
+
+    private DateTime? _last;
+
+    /// <summary>Call on every timer tick; true when the gap since the previous call is a sleep.</summary>
+    public bool Observe(DateTime now)
+    {
+        var woke = _last is { } last && now - last > Threshold;
+        _last = now;
+        return woke;
     }
 }
 
@@ -249,7 +349,7 @@ public static class TermitusNetwork
         {
             using var handler = new SocketsHttpHandler
             {
-                Proxy = new WebProxy($"socks5://{Global.Loopback}:{localPort}"),
+                Proxy = TermitusLocalGuard.Proxy(localPort),
                 UseProxy = true,
                 AllowAutoRedirect = false,
             };

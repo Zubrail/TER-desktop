@@ -60,4 +60,24 @@ public class TermitusTrayMenuTests
         await Assert.That(d.Contains(loc.TrayOpen)).IsTrue();
         await Assert.That(d.EndsWith(loc.TrayQuit)).IsTrue();
     }
+
+    [Test]
+    public async Task IconState_Priority_BusyThenWarnThenOn()
+    {
+        await Assert.That(TermitusTrayMenu.IconState(true, true, true)).IsEqualTo("busy");
+        await Assert.That(TermitusTrayMenu.IconState(false, true, true)).IsEqualTo("warn");
+        await Assert.That(TermitusTrayMenu.IconState(false, false, true)).IsEqualTo("on");
+        await Assert.That(TermitusTrayMenu.IconState(false, false, false)).IsEqualTo("off");
+    }
+
+    [Test]
+    public async Task Tooltip_FollowsState()
+    {
+        var loc = TermitusLocale.Current;
+        await Assert.That(TermitusTrayMenu.Tooltip("on", loc)).IsEqualTo(loc.TrayTooltipOn);
+        await Assert.That(TermitusTrayMenu.Tooltip("off", loc)).IsEqualTo(loc.TrayTooltipOff);
+        await Assert.That(TermitusTrayMenu.Tooltip("busy", loc)).IsEqualTo(loc.TrayTooltipBusy);
+        await Assert.That(TermitusTrayMenu.Tooltip("warn", loc)).IsEqualTo(loc.TrayTooltipWarn);
+        await Assert.That(TermitusTrayMenu.Tooltip("???", loc)).IsEqualTo(loc.TrayTooltipOff);
+    }
 }

@@ -181,6 +181,23 @@ public partial class TermitusHomeViewModel
     /// A connection step failed: remember it for the report (in memory, masked) and show the card.
     /// <paramref name="logText"/> is one of our fixed phrases (+ an exception type), never a message from outside.
     /// </summary>
+    /// <summary>0.6.5 Windows: a core file is gone (antivirus). Names only in the log, plain steps on the card.</summary>
+    private Task RaiseCoreBlockedAsync(IReadOnlyList<string> names)
+    {
+        TermitusErrorLog.Add("файл ядра удалён антивирусом: " + string.Join(", ", names));
+        Logging.SaveLog($"{_tag}: core file(s) missing: {string.Join(", ", names)}");
+        OnUi(() =>
+        {
+            ConnErrTitle = Loc.ErrTitleCoreBlocked;
+            ConnErrFailed = Loc.CoreBlockedFailed(names);
+            ConnErrWorks = Loc.CoreBlockedWhat;
+            ShowConnError = true;
+            ShowOtherVpn = false;
+        });
+        RefreshReportPreview();
+        return Task.CompletedTask;
+    }
+
     private async Task RaiseConnErrorAsync(string title, string logText)
     {
         TermitusErrorLog.Add(logText);

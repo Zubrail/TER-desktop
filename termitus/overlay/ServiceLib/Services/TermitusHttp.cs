@@ -1,7 +1,7 @@
 namespace ServiceLib.Services;
 
 /// <summary>Status + body of one call. Status null = no HTTP answer at all (offline, timeout, TLS).</summary>
-public sealed record TermitusHttpResult(int? Status, string? Body, TimeSpan? RetryAfter = null)
+public sealed record TermitusHttpResult(int? Status, string? Body, TimeSpan? RetryAfter = null, string? TrialReason = null)
 {
     public bool IsSuccess => Status is >= 200 and < 300;
 }
@@ -21,7 +21,7 @@ public static class TermitusHttp
     private const int MaxBody = 256 * 1024;
     private static readonly object _lock = new();
     private static HttpClient? _direct;
-    private static (int Port, HttpClient Client)? _socks;
+    private static (int Port, string? Pass, HttpClient Client)? _socks;
 
     public static string UserAgent => Utils.GetVersion(false);
 
@@ -49,12 +49,12 @@ public static class TermitusHttp
             {
                 return _direct ??= NewClient(null);
             }
-            if (_socks is { } s && s.Port == socksPort)
+            if (_socks is { } s && s.Port == socksPort && s.Pass == TermitusLocalGuard.Pass)
             {
                 return s.Client;
             }
-            var c = NewClient(new WebProxy($"socks5://{Global.Loopback}:{socksPort}"));
-            _socks = (socksPort.Value, c); // the old one is left for the GC: in-flight requests may still use it
+            var c = NewClient(TermitusLocalGuard.Proxy(socksPort.Value));
+            _socks = (socksPort.Value, TermitusLocalGuard.Pass, c); // the old one is left for the GC: in-flight requests may still use it
             return c;
         }
     }
@@ -93,7 +93,8 @@ public static class TermitusHttp
                         body = null;
                     }
                 }
-                return new TermitusHttpResult((int)resp.StatusCode, body, RetryAfterOf(resp));
+                string? reason = resp.Headers.TryGetValues("X-Trial-Reason", out var rv) ? rv.FirstOrDefault() : null;
+                return new TermitusHttpResult((int)resp.StatusCode, body, RetryAfterOf(resp), reason);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

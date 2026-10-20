@@ -58,6 +58,7 @@ public partial class TermitusHomeViewModel
         UpdateCheckResult = string.Empty;
         AutoUpdate = TermitusSettings.AutoUpdate;
         TermitusUpdater.CleanOld();
+        TermitusWinUpdate.AfterStartHousekeeping(); // Windows: log the helper's result, remove .old-* / update\ leftovers
 
         UpdateCheckCmd = ReactiveCommand.CreateFromTask(() => Bg(() => CheckForUpdateAsync(manual: true)));
         UpdateOpenCmd = ReactiveCommand.CreateFromTask(() =>
@@ -264,6 +265,11 @@ public partial class TermitusHomeViewModel
             }
 
             _stagedDmg = file;
+            if (OperatingSystem.IsWindows())
+            {
+                await InstallWindowsAsync(info, file);
+                return;
+            }
             if (!OperatingSystem.IsMacOS())
             {
                 OnUi(() =>
@@ -283,7 +289,7 @@ public partial class TermitusHomeViewModel
             var target = TermitusUpdater.CurrentBundle();
             var canReplace = target != null && TermitusUpdater.IsWritableDir(Path.GetDirectoryName(target)!);
             var staged = canReplace
-                ? await TermitusUpdater.StageFromDmgAsync(file, info.Version, "online.termitus.desktop")
+                ? await TermitusUpdater.StageFromDmgAsync(file, info.Version, "online.termitus.desktop", info.Sha256)
                 : null;
             if (canReplace && staged == null)
             {
@@ -306,21 +312,10 @@ public partial class TermitusHomeViewModel
                 return;
             }
 
-            // The swap helper waits for this process to exit, so leave cleanly: protection off first.
-            if (_connected)
-            {
-                await DisconnectAsync();
-            }
-            // 0.6.4 (LESSONS #2): whatever the state, no core may outlive the swap -- stop it (Mac: the root core
-            // too, and wait for it) and clear the system proxy before TER quits.
-            PublishSysProxy(ESysProxyType.ForcedClear);
-            await CoreManager.Instance.CoreStop();
-            if (OperatingSystem.IsMacOS())
-            {
-                await TermitusMacCore.ShutdownAsync(); // core and supervisor
-            }
+            // The swap helper waits for this process to exit, so leave cleanly.
+            await PreUpdateCleanupAsync();
             var open = !(TermitusTestHooks.IsTestInstance && !TermitusTestHooks.UpdateTarget.IsNullOrEmpty());
-            if (!TermitusUpdater.StartSwap(staged.AppPath, target!, open))
+            if (!TermitusUpdater.StartSwap(staged.AppPath, target!, open, staged.TreeHash))
             {
                 OnUi(() =>
                 {
@@ -342,5 +337,77 @@ public partial class TermitusHomeViewModel
                 UpdateStatusText = Loc.UpdateDownloadFailed;
             });
         }
+    }
+
+    /// <summary>
+    /// Before TER quits for an update (LESSONS #2): protection off, no core may outlive the swap, system proxy cleared.
+    /// Shared by the macOS and Windows paths.
+    /// </summary>
+    private async Task PreUpdateCleanupAsync()
+    {
+        if (_connected)
+        {
+            await DisconnectAsync();
+        }
+        PublishSysProxy(ESysProxyType.ForcedClear);
+        await CoreManager.Instance.CoreStop();
+        if (OperatingSystem.IsMacOS())
+        {
+            await TermitusMacCore.ShutdownAsync(); // core and supervisor
+        }
+    }
+
+    /// <summary>
+    /// 0.6.5 Windows install: the zip is verified. If the program folder is writable, unpack it, clean up and hand over to the
+    /// NEW TER.exe (helper mode) which swaps the folders after this process exits; otherwise show the file (honest message).
+    /// </summary>
+    private async Task InstallWindowsAsync(TermitusUpdateInfo info, string zipFile)
+    {
+        var appDir = TermitusWinUpdate.CurrentAppDir();
+        // The helper renames appDir into a sibling, so its PARENT must be writable too (not only appDir itself).
+        var parent = appDir == null ? null : Path.GetDirectoryName(appDir);
+        if (appDir == null || parent == null || !TermitusUpdater.IsWritableDir(appDir) || !TermitusUpdater.IsWritableDir(parent))
+        {
+            OnUi(() =>
+            {
+                SetUpdateStage(UpdateStage.Manual);
+                UpdateStatusText = Loc.UpdateManualWinNoWrite;
+            });
+            return;
+        }
+        OnUi(() =>
+        {
+            SetUpdateStage(UpdateStage.Installing);
+            UpdateProgressKnown = false;
+            UpdateStatusText = Loc.UpdateInstalling;
+        });
+        TermitusWinUpdate.MarkUpdateStarted(); // from now on the 30 s housekeeping must leave the update folder alone
+        var newDir = await Task.Run(() => TermitusWinUpdate.StageFromZip(zipFile, info.Version, TermitusWinUpdate.UpdateRoot(), info.Sha256));
+        if (newDir == null)
+        {
+            TermitusWinUpdate.MarkUpdateAborted();
+            TermitusErrorLog.Add("обновление: не удалось распаковать");
+            OnUi(() =>
+            {
+                SetUpdateStage(UpdateStage.Failed);
+                UpdateStatusText = Loc.UpdateStageFailed;
+            });
+            return;
+        }
+        // Launch the helper FIRST (it waits for this process to exit anyway); only when it runs do we stop the core and quit.
+        // If it cannot start, the connection stays as it was.
+        if (!TermitusWinUpdate.StartApplyHelper(newDir, appDir))
+        {
+            TermitusWinUpdate.MarkUpdateAborted();
+            OnUi(() =>
+            {
+                SetUpdateStage(UpdateStage.Failed);
+                UpdateStatusText = Loc.UpdateStageFailed;
+            });
+            return;
+        }
+        await PreUpdateCleanupAsync();
+        Logging.SaveLog($"{_tag}: update {info.Version} staged, restarting");
+        QuitForUpdateRequested.Publish();
     }
 }

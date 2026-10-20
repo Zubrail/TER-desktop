@@ -46,6 +46,11 @@ public partial class TermitusHomeViewModel : MyReactiveObject
     private volatile bool _recovering;
     private volatile bool _interrupted;        // kill switch holding the internet closed
     private DateTime? _reloadBusySince;
+    // 0.6.6: sleep/wake. A separate 2 s timer measures its own gap (the guard tick can be busy for a long time).
+    private readonly TermitusWakeDetector _wake = new();
+    private System.Threading.Timer? _wakeTimer;
+    private int _wakeSeen;
+    private volatile bool _noConn;             // core alive, automatic fixes used up: «Нет соединения — нажмите…»
     private volatile string? _guardTitle;      // loud state shown instead of the normal status
     private volatile string? _guardHint;
     private static readonly TimeSpan GuardInterval = TimeSpan.FromSeconds(2);
@@ -346,6 +351,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         InitUpdate();
         InitTun();
         InitAccount2();
+        InitTrial();
         // 0.5: «Продлить» opens the in-app pay sheet (plans + methods + offer). When the backend has no
         // payment API yet, the sheet itself says "оплата пока в Telegram-боте" with the bot button.
         RenewCmd = PayOpenCmd;
@@ -452,6 +458,13 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         _accountTimer = new System.Threading.Timer(_ => _ = RefreshAccountAsync(manual: false), null, TimeSpan.FromSeconds(15), AccountRefreshEvery);
         // First tick late: at launch upstream itself (re)starts the core.
         _guardTimer = new System.Threading.Timer(_ => _ = GuardTickAsync(), null, TimeSpan.FromSeconds(10), GuardInterval);
+        _wakeTimer = new System.Threading.Timer(_ =>
+        {
+            if (_wake.Observe(DateTime.UtcNow))
+            {
+                Volatile.Write(ref _wakeSeen, 1);
+            }
+        }, null, GuardInterval, GuardInterval);
     }
 
     private async Task Init()
@@ -478,6 +491,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
 
             await RefreshStateAsync();
             _ = TunStartupAsync();
+            _ = Task.Delay(2500).ContinueWith(_ => AskAboutCrashAsync()); // 0.6.5: a crash file from the last run -> ask, never send by itself
         }
         catch (Exception ex)
         {
@@ -557,7 +571,11 @@ public partial class TermitusHomeViewModel : MyReactiveObject
 
         try
         {
-            if (_connected)
+            if (_connected && _noConn)
+            {
+                await ManualReconnectAsync(); // «Нет соединения — нажмите, чтобы переподключить»
+            }
+            else if (_connected)
             {
                 await DisconnectAsync();
             }
@@ -580,11 +598,14 @@ public partial class TermitusHomeViewModel : MyReactiveObject
     /// 0.6: a throw-away test instance (TER_TEST_INSTANCE) never touches the system proxy — it would change the
     /// real TER's / the owner's network settings. Everything else goes through upstream's event as before.
     /// </summary>
+    private static volatile bool _testProxyOn;
+
     private static void PublishSysProxy(ESysProxyType type)
     {
         if (TermitusTestHooks.IsTestInstance)
         {
             Logging.SaveLog($"{_tag}: test instance: system proxy {type} suppressed");
+            _testProxyOn = type == ESysProxyType.ForcedChange; // so the guard sees «connected» (live checks of the guard)
             return;
         }
         AppEvents.SysProxyChangeRequested.Publish(type);
@@ -610,7 +631,8 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             var others = await TermitusOtherVpn.DetectAsync();
             if (others.Count > 0)
             {
-                Logging.SaveLog($"{_tag}: another VPN holds the default route ({string.Join(",", others)})");
+                // count only: on Windows these are adapter names the user may have typed (no-logs policy, 19.10)
+                Logging.SaveLog($"{_tag}: another VPN holds the default route ({others.Count} adapter(s))");
                 TermitusErrorLog.Add("включён другой VPN (занят маршрут по умолчанию)");
                 OnUi(() =>
                 {
@@ -669,6 +691,20 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         if (_config.TunModeItem?.EnableTun != true || TermitusSettings.KillSwitch)
         {
             PublishSysProxy(ESysProxyType.ForcedChange);
+        }
+        // 0.6.5 Windows: a core file removed by the antivirus gets a clear card, not a silent failure
+        if (TermitusCoreFiles.MissingOnWindows(_config.TunModeItem?.EnableTun == true) is { Count: > 0 } blocked)
+        {
+            PublishSysProxy(ESysProxyType.ForcedClear);
+            OnUi(() =>
+            {
+                IsConnecting = false;
+                StatusText = Loc.TapToConnect;
+                SubStatusText = string.Empty;
+            });
+            SetBusy(false);
+            await RaiseCoreBlockedAsync(blocked);
+            return;
         }
         await _main.Reload();
         if (await TunFallbackIfCancelledAsync())
@@ -789,6 +825,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
     {
         _policy.Reset();
         _interrupted = false;
+        _noConn = false;
         _guardTitle = null;
         _guardHint = null;
     }
@@ -825,6 +862,11 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             var now = DateTime.UtcNow;
             var fingerprint = TermitusNetwork.Current();
             _policy.ObserveNetwork(fingerprint, now);
+            if (Interlocked.Exchange(ref _wakeSeen, 0) == 1)
+            {
+                Logging.SaveLog($"{_tag}: guard: the Mac woke up (timer gap)");
+                _policy.ObserveWake(now);
+            }
 
             if (!_connected || _busy || _recovering)
             {
@@ -849,7 +891,8 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             // Switched off outside the home screen (tray menu / advanced UI): respect it,
             // never restart a core the user stopped.
             if (_config.SystemProxyItem?.SysProxyType != ESysProxyType.ForcedChange
-                && _config.TunModeItem?.EnableTun != true)
+                && _config.TunModeItem?.EnableTun != true
+                && !(TermitusTestHooks.IsTestInstance && _testProxyOn))
             {
                 _connected = false;
                 ResetGuard();
@@ -871,6 +914,14 @@ public partial class TermitusHomeViewModel : MyReactiveObject
                     await RecoverAsync(decision);
                     break;
 
+                case TermitusGuardAction.CheckHealth:
+                    await CheckHealthAsync(decision);
+                    break;
+
+                case TermitusGuardAction.NoConnection:
+                    await NoConnectionAsync();
+                    break;
+
                 case TermitusGuardAction.GiveUp:
                     await GiveUpAsync(decision);
                     break;
@@ -886,20 +937,30 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         }
     }
 
+    private IReadOnlyList<string>? _coreBlockedFiles;
+
     private async Task RecoverAsync(TermitusGuardDecision d)
     {
+        // 0.6.5 Windows: the core died because its file is gone (antivirus) -> say so instead of retrying in vain
+        if (TermitusCoreFiles.MissingOnWindows(_config.TunModeItem?.EnableTun == true) is { Count: > 0 } gone)
+        {
+            _coreBlockedFiles = gone;
+            await GiveUpAsync(new(TermitusGuardAction.GiveUp, TermitusTrigger.CoreDied, _policy.Attempts, false));
+            _coreBlockedFiles = null;
+            return;
+        }
         _recovering = true;
         Logging.SaveLog($"{_tag}: guard {d.Trigger} attempt {d.Attempt} repick={d.Repick}");
         TermitusErrorLog.Add(d.Trigger switch
         {
             TermitusTrigger.NetworkChanged => "сеть сменилась, переподключаемся",
-            TermitusTrigger.TunnelDead => "туннель не отвечает, переподключаемся",
+            TermitusTrigger.TunnelDead => d.Repick ? "туннель не отвечает, ищем другой сервер" : "туннель не отвечает, перезапускаем ядро",
             _ => "ядро остановилось, переподключаемся",
         });
         var reason = d.Trigger switch
         {
             TermitusTrigger.NetworkChanged => Loc.ReasonNetwork,
-            TermitusTrigger.TunnelDead => Loc.ReasonTunnel,
+            TermitusTrigger.TunnelDead => d.Repick ? Loc.ReasonTunnel : Loc.ReasonTunnelRestart,
             _ => Loc.ReasonCoreDied,
         };
         OnUi(() =>
@@ -910,6 +971,8 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             SubStatusText = reason;
         });
 
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var before = _config.IndexId;
         try
         {
             if (d.Repick)
@@ -917,11 +980,19 @@ public partial class TermitusHomeViewModel : MyReactiveObject
                 // Same choice rules as Connect: chosen location's fastest transport,
                 // or Auto = fastest foreign location, never Russia.
                 await TestAllAsync();
-                await ApplyChoiceAsync(); // null = nothing answered: keep the current server
+                var picked = await ApplyChoiceAsync(); // null = nothing answered: keep the current server
+                // The server that just failed through the live tunnel is still "the best" -> take the next working one
+                // (always on fix 3; on fix 2 only when its own test did not answer either).
+                var stillBest = picked == null || picked.IndexId == before;
+                var answers = before.IsNotEmpty() && _delays.TryGetValue(before, out var ms) && ms > 0;
+                if (stillBest && (!answers || d.Attempt >= 3) && PickAnotherServer(before) is { } other)
+                {
+                    await ConfigHandler.SetDefaultServerIndex(_config, other);
+                }
             }
 
             await _main.Reload();
-            await Task.Delay(1500);
+            await Task.Delay(500);
             if (!_connected)
             {
                 // The user pressed "Disconnect" while we were reconnecting: honour it.
@@ -932,19 +1003,27 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             var ok = CoreManager.Instance.TermitusCoreAlive() == true;
             if (ok && d.Trigger != TermitusTrigger.CoreDied)
             {
-                // After a network change the core can be alive but useless (server not
+                // After a network change / wake the core can be alive but useless (server not
                 // reachable from the new network): check that something passes through.
-                ok = await TermitusNetwork.ProbeThroughCoreAsync(
-                    AppManager.Instance.GetLocalPort(EInboundProtocol.socks),
-                    _config.SpeedTestItem?.SpeedPingTestUrl ?? Global.SpeedPingTestUrls.First(),
-                    TimeSpan.FromSeconds(8));
+                ok = await ProbeTunnelAsync();
                 _policy.ReportProbe(ok);
             }
-            Logging.SaveLog($"{_tag}: guard attempt {d.Attempt} -> {(ok ? "ok" : "failed")}");
+            Logging.SaveLog($"{_tag}: guard attempt {d.Attempt} -> {(ok ? "ok" : "failed")} in {watch.ElapsedMilliseconds} ms");
 
-            if (ok && (_interrupted || _guardTitle != null))
+            if (ok)
             {
-                await OnRestoredAsync();
+                if (_config.TunModeItem?.EnableTun != true && _config.SystemProxyItem?.SysProxyType == ESysProxyType.ForcedChange)
+                {
+                    PublishSysProxy(ESysProxyType.ForcedChange); // a new network service may have come without our proxy
+                }
+                if (_interrupted || _guardTitle != null)
+                {
+                    await OnRestoredAsync();
+                }
+                if (_config.IndexId != before && d.Trigger != TermitusTrigger.CoreDied)
+                {
+                    await AnnounceSwitchAsync();
+                }
             }
         }
         catch (Exception ex)
@@ -959,8 +1038,110 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         }
     }
 
+
+    /// <summary>
+    /// Wake / network change with a live core: one quiet probe through the tunnel. Nothing is restarted,
+    /// shown or logged beyond one line when it is fine; a failure is reported to the policy, which decides the fix.
+    /// </summary>
+    private async Task CheckHealthAsync(TermitusGuardDecision d)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var ok = await ProbeTunnelAsync();
+        Logging.SaveLog($"{_tag}: guard {d.Trigger} probe -> {(ok ? "ok" : "failed")} in {watch.ElapsedMilliseconds} ms");
+        _policy.ReportProbe(ok);
+        if (!ok)
+        {
+            TermitusErrorLog.Add(d.Trigger == TermitusTrigger.Woke ? "после сна туннель не отвечает" : "после смены сети туннель не отвечает");
+            return;
+        }
+        if (_config.TunModeItem?.EnableTun != true && _config.SystemProxyItem?.SysProxyType == ESysProxyType.ForcedChange)
+        {
+            PublishSysProxy(ESysProxyType.ForcedChange);
+        }
+        if (_interrupted || _guardTitle != null)
+        {
+            await OnRestoredAsync();
+        }
+    }
+
+    /// <summary>Two tries 1.5 s apart (right after wake DNS / routes may need a moment) through the local core.</summary>
+    private async Task<bool> ProbeTunnelAsync()
+    {
+        var port = AppManager.Instance.GetLocalPort(EInboundProtocol.socks);
+        var url = _config.SpeedTestItem?.SpeedPingTestUrl ?? Global.SpeedPingTestUrls.First();
+        for (var i = 0; i < 2; i++)
+        {
+            if (await TermitusNetwork.ProbeThroughCoreAsync(port, url, TimeSpan.FromSeconds(5)))
+            {
+                return true;
+            }
+            if (i == 0)
+            {
+                await Task.Delay(1500);
+            }
+        }
+        return false;
+    }
+
+    /// <summary>The fastest server that answered its last test, not the failed one; another country first, Russia last.</summary>
+    private string? PickAnotherServer(string? current)
+    {
+        var all = _locations.SelectMany(l => l.IndexIds.Select(id => (l, id))).ToList();
+        var curLoc = all.FirstOrDefault(x => x.id == current).l;
+        var preferred = PreferredTransport();
+        return all.Where(x => x.id != current && _delays.TryGetValue(x.id, out var ms) && ms > 0)
+            .OrderBy(x => x.l.IsRussia ? 2 : x.l == curLoc ? 1 : 0)
+            .ThenBy(x => preferred != null && !preferred(x.id) ? 1 : 0)
+            .ThenBy(x => _delays[x.id])
+            .Select(x => x.id)
+            .FirstOrDefault();
+    }
+
+    private async Task AnnounceSwitchAsync()
+    {
+        var now = _config.IndexId;
+        var loc = _locations.FirstOrDefault(l => l.IndexIds.Contains(now));
+        if (loc == null)
+        {
+            return;
+        }
+        var text = Loc.SwitchedAfterNetwork(TermitusLocations.DisplayParts(loc.Key).Name);
+        Logging.SaveLog($"{_tag}: guard switched server after a network change");
+        NoticeManager.Instance.Enqueue(text);
+        OnUi(() => SubStatusText = text);
+        _ = Task.Delay(TimeSpan.FromSeconds(10)).ContinueWith(_ => OnUi(() =>
+        {
+            if (SubStatusText == text)
+            {
+                SubStatusText = string.Empty;
+            }
+        }));
+        await Task.CompletedTask;
+    }
+
+    /// <summary>Core alive, 3 automatic fixes did not help: tell it straight and wait for a click (never a loop).</summary>
+    private async Task NoConnectionAsync()
+    {
+        Logging.SaveLog($"{_tag}: guard: no connection after {TermitusReconnectPolicy.MaxAliveAttempts} automatic fixes; waiting for the user");
+        TermitusErrorLog.Add("нет соединения после трёх автоматических попыток");
+        _noConn = true;
+        _guardTitle = Loc.NoConnectionClick;
+        _guardHint = Loc.NoConnectionClickHint;
+        NoticeManager.Instance.Enqueue(Loc.NoConnectionClick);
+        await RefreshStateAsync();
+    }
+
+    /// <summary>The click on «Нет соединения — нажмите, чтобы переподключить»: a fresh round, switching the server.</summary>
+    private async Task ManualReconnectAsync()
+    {
+        Logging.SaveLog($"{_tag}: manual reconnect from the no-connection state");
+        ResetGuard();
+        await RecoverAsync(new(TermitusGuardAction.Recover, TermitusTrigger.TunnelDead, 1, true));
+    }
+
     private async Task OnRestoredAsync()
     {
+        _noConn = false;
         OnUi(() => ShowConnError = false);
         var wasLoud = _interrupted || _guardTitle != null;
         _interrupted = false;
@@ -1005,8 +1186,15 @@ public partial class TermitusHomeViewModel : MyReactiveObject
 
         NoticeManager.Instance.Enqueue(_guardTitle);
         _main.StatusBarViewModel.ShowHideWindowRequested.Publish(true);
-        await RaiseConnErrorAsync(TermitusSettings.KillSwitch ? Loc.ErrTitleDroppedBlocked : Loc.ErrTitleDropped,
-            $"переподключение не удалось ({d.Attempt} попыток)");
+        if (_coreBlockedFiles is { Count: > 0 } cb)
+        {
+            await RaiseCoreBlockedAsync(cb);
+        }
+        else
+        {
+            await RaiseConnErrorAsync(TermitusSettings.KillSwitch ? Loc.ErrTitleDroppedBlocked : Loc.ErrTitleDropped,
+                $"переподключение не удалось ({d.Attempt} попыток)");
+        }
         await RefreshStateAsync();
     }
 
@@ -1446,6 +1634,10 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             Volatile.Write(ref _accountRefreshRunning, 0);
             OnUi(() => IsAccountRefreshing = false);
             await RenderAccountAsync();
+            if (!ShowInviteRow && !_accountOffline)
+            {
+                _ = InviteLoadAsync(); // Home «Пригласить друга» appears once the referral link is known
+            }
         }
     }
 
@@ -1480,10 +1672,20 @@ public partial class TermitusHomeViewModel : MyReactiveObject
                     break;
 
                 case TermitusAccountState.Expiring:
-                    title = Loc.ExpiresIn(st.DaysLeft ?? 0);
+                    // one rule everywhere (hours left -> days / hours), see TermitusAccount.Left
+                    if (st.Until is { } expUntil && TermitusAccount.Left(expUntil, now) is { } left)
+                    {
+                        title = Loc.ExpiresInLeft(left);
+                        chip = Loc.SubLeft(left);
+                        banner = Loc.BannerExpiringLeft(left);
+                    }
+                    else
+                    {
+                        title = Loc.ExpiresIn(st.DaysLeft ?? 0);
+                        chip = Loc.SubDaysLeft(st.DaysLeft ?? 0);
+                        banner = Loc.BannerExpiring(st.DaysLeft ?? 0);
+                    }
                     detail = date != null ? Loc.Until(date) : string.Empty;
-                    chip = Loc.SubDaysLeft(st.DaysLeft ?? 0);
-                    banner = Loc.BannerExpiring(st.DaysLeft ?? 0);
                     break;
 
                 case TermitusAccountState.Expired:
@@ -1505,6 +1707,13 @@ public partial class TermitusHomeViewModel : MyReactiveObject
                     detail = Loc.UnknownHint;
                     chip = Loc.SubUnknown;
                     break;
+            }
+
+            // The trial card follows the same clock and the same «time left» rule as the banner and the chip.
+            if (TermitusTrial.DecodeInfo(TermitusSettings.TrialInfo) is { } trialInfo && TermitusSettings.TrialCode.IsNotEmpty())
+            {
+                var trialLine = TermitusTrial.TrialLine(trialInfo.Days, st.Until ?? trialInfo.Until, now, en);
+                OnUi(() => TrialLineText = trialLine);
             }
 
             var traffic = st.TrafficUsed is { } used
@@ -1640,6 +1849,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             _renewUrl = null;
             _topupUrl = null;
             Acct2Reset();
+            ClearTrialState();
             Logging.SaveLog($"{_tag}: logged out ({subs.Count} subscription(s) removed)");
 
             // 4) Upstream lists (advanced UI) + our screens.

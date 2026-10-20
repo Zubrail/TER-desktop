@@ -66,6 +66,27 @@ public static class TermitusSettings
         set => Write("update_later", value);
     }
 
+    /// <summary>0.6.5 trial: random id made ONCE per install (see TermitusTrial.InstallId). Never logged, never sent anywhere but /app/trial.</summary>
+    public static string InstallIdRaw
+    {
+        get => Read().TryGetValue("install_id", out var v) ? v : string.Empty;
+        set => Write("install_id", value);
+    }
+
+    /// <summary>The gift code of the in-app trial (redeemed in the bot to turn the trial into a real account); empty = no trial.</summary>
+    public static string TrialCode
+    {
+        get => Read().TryGetValue("trial_code", out var v) ? v : string.Empty;
+        set => Write("trial_code", value);
+    }
+
+    /// <summary>"days|unix seconds of the end" of the trial, or empty.</summary>
+    public static string TrialInfo
+    {
+        get => Read().TryGetValue("trial_info", out var v) ? v : string.Empty;
+        set => Write("trial_info", value);
+    }
+
     /// <summary>Parses "key=value" lines; ignores blanks, comments and junk.</summary>
     public static Dictionary<string, string> Parse(IEnumerable<string> lines)
     {

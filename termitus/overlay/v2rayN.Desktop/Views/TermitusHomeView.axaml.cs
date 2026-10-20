@@ -276,10 +276,14 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
                         var old = acctQr.Source as IDisposable;
                         acctQr.Source = png == null ? null : new Bitmap(new MemoryStream(png));
                         old?.Dispose();
+                        var oldFriend = friendQr.Source as IDisposable;
+                        friendQr.Source = png == null ? null : new Bitmap(new MemoryStream(png));
+                        oldFriend?.Dispose();
                     }
                     catch (Exception ex)
                     {
                         acctQr.Source = null;
+                        friendQr.Source = null;
                         Logging.SaveLog($"TER: QR image failed ({ex.GetType().Name})");
                     }
                 });

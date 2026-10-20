@@ -18,7 +18,7 @@ public sealed record TermitusAcctPayRow(string What, string Amount, string Capti
 /// </summary>
 public partial class TermitusHomeViewModel
 {
-    private enum Acct2Sheet { None, Rename, Remove, InvitePay, NoFunds, Qr, Rotate, RotateDone }
+    private enum Acct2Sheet { None, Rename, Remove, InvitePay, NoFunds, Qr, Rotate, RotateDone, Friend }
 
     private const int PaymentsShown = 10;
 
@@ -56,6 +56,7 @@ public partial class TermitusHomeViewModel
     [Reactive] public partial bool AcctSheetQr { get; set; }
     [Reactive] public partial bool AcctSheetRotate { get; set; }
     [Reactive] public partial bool AcctSheetRotateDone { get; set; }
+    [Reactive] public partial bool AcctSheetFriend { get; set; }
     [Reactive] public partial bool AcctSheetCloseOnly { get; set; }
     [Reactive] public partial bool AcctSheetBusy { get; set; }
     [Reactive] public partial string AcctSheetTitle { get; set; }
@@ -309,6 +310,7 @@ public partial class TermitusHomeViewModel
         OnUi(() =>
         {
             Acct2Manager = Acct2Guest = Acct2Offline = Acct2LoadError = Acct2HasRef = Acct2HasPayments = false;
+            ShowInviteRow = false;
             AcctDevices.Clear();
             AcctPayments.Clear();
             AcctQrPng = null;
@@ -356,6 +358,7 @@ public partial class TermitusHomeViewModel
         OnUi(() =>
         {
             Acct2HasRef = true;
+            ShowInviteRow = link.Length > 0;
             RefLink = link;
             RefHasLink = link.Length > 0;
             RefInvited = r.Invited.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -416,7 +419,8 @@ public partial class TermitusHomeViewModel
         AcctSheetQr = _acctSheet == Acct2Sheet.Qr;
         AcctSheetRotate = _acctSheet == Acct2Sheet.Rotate;
         AcctSheetRotateDone = _acctSheet == Acct2Sheet.RotateDone;
-        AcctSheetCloseOnly = _acctSheet is Acct2Sheet.Qr or Acct2Sheet.RotateDone;
+        AcctSheetFriend = _acctSheet == Acct2Sheet.Friend;
+        AcctSheetCloseOnly = _acctSheet is Acct2Sheet.Qr or Acct2Sheet.RotateDone or Acct2Sheet.Friend;
     }
 
     private void CloseAcctSheet()

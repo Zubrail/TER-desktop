@@ -251,7 +251,8 @@ public partial class TermitusHomeViewModel
             Locations.Select(l => (l.Key, l.Title, l.IsSelected)).ToList(),
             sb.BlSystemProxyClear,
             sb.BlSystemProxySet,
-            sb.BlSystemProxyNothing);
+            sb.BlSystemProxyNothing,
+            _noConn);
     }
 
     /// <summary>Test-tour only: shows the connected look with sample numbers (no real tunnel).</summary>

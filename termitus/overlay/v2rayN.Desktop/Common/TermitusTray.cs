@@ -41,6 +41,14 @@ internal static class TermitusTray
 
     public static void Start(MainWindow window, TermitusHomeViewModel vm)
     {
+        if (OperatingSystem.IsWindows() && !Design.IsDesignMode)
+        {
+            // 0.6.5: Windows shares Execute / OpenMainWindow / QuitApp below; the tray itself is TermitusTrayWin.
+            _window = window;
+            _vm = vm;
+            TermitusTrayWin.Start(window, vm);
+            return;
+        }
         if (!OperatingSystem.IsMacOS() || Design.IsDesignMode || _item != 0)
         {
             return;
@@ -105,7 +113,7 @@ internal static class TermitusTray
         {
             return;
         }
-        var state = _vm.IsConnecting ? "busy" : _vm.StatusWarn ? "warn" : _vm.IsConnected ? "on" : "off";
+        var state = TermitusTrayMenu.IconState(_vm.IsConnecting, _vm.StatusWarn, _vm.IsConnected);
         if (state == _lastIconState)
         {
             return;
@@ -120,13 +128,7 @@ internal static class TermitusTray
             SendSize(img, Sel("setSize:"), 18, 18);
             SendBool(img, Sel("setTemplate:"), state == "off"); // grey/black glyph adapts to the menu bar
             Send(_button, Sel("setImage:"), img);
-            Send(_button, Sel("setToolTip:"), NSString(state switch
-            {
-                "on" => loc.TrayTooltipOn,
-                "busy" => loc.TrayTooltipBusy,
-                "warn" => loc.TrayTooltipWarn,
-                _ => loc.TrayTooltipOff,
-            }));
+            Send(_button, Sel("setToolTip:"), NSString(TermitusTrayMenu.Tooltip(state, loc)));
             Logging.SaveLog($"TER tray: icon -> {state}");
         }
         catch (Exception ex)
@@ -376,6 +378,7 @@ internal static class TermitusTray
         {
             _popover?.Hide();
             Stop();
+            TermitusTrayWin.Stop();
             await AppManager.Instance.AppExitAsync(false);
             AppManager.Instance.Shutdown(true);
         }
@@ -387,6 +390,10 @@ internal static class TermitusTray
 
     private static void ActivateApp()
     {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
         try
         {
             Send(Send(GetClass("NSApplication"), Sel("sharedApplication")), Sel("activateIgnoringOtherApps:"), 1);
@@ -581,12 +588,11 @@ internal static class TermitusTray
     #endregion Objective-C plumbing
 }
 
-/// <summary>Draws the menu-bar glyph (dome with an arch, as in the app icon) for each state.</summary>
+/// <summary>Draws the menu-bar glyph (the brand T, as in the app icon) for each state.</summary>
 internal static class TermitusTrayIcon
 {
-    // App-icon geometry (512 box): dome with the arch cut out, plus the warm dot inside the arch.
-    private const string DomePath = "F0 M64,400 C64,250 150,116 256,112 C362,116 448,250 448,400 Z M212,400 L212,330 A44,44 0 0 1 300,330 L300,400 Z";
-    private const string DotPath = "M240,356 A16,16 0 1 0 272,356 A16,16 0 1 0 240,356 Z";
+    // App-icon geometry (512 box): the brand T (same polygon as icons/gen_icon.py), 208 x 189.5 units.
+    private const string TPath = "F0 M152,163.5 L360,163.5 L338,216.5 L285,216.5 L256,353 L227,216.5 L174,216.5 Z";
 
     public static byte[] RenderPng(string state)
     {
@@ -601,14 +607,13 @@ internal static class TermitusTrayIcon
         using var rtb = new RenderTargetBitmap(new PixelSize(36, 36), new Vector(144, 144));
         using (var ctx = rtb.CreateDrawingContext())
         {
-            // The 36 px bitmap at 144 dpi is an 18 x 18 DIP canvas: the dome (384 x 288) fits in 16 x 12 DIPs.
-            const double s = 16.0 / 384.0;
-            var m = Matrix.CreateTranslation(-64, -112) * Matrix.CreateScale(s, s) * Matrix.CreateTranslation(1, 3.25);
+            // The 36 px bitmap at 144 dpi is an 18 x 18 DIP canvas: the T (208 x 189.5) fits in 15 x 13.7 DIPs.
+            const double s = 15.0 / 208.0;
+            var m = Matrix.CreateTranslation(-152, -163.5) * Matrix.CreateScale(s, s) * Matrix.CreateTranslation(1.5, 2.15);
             using (ctx.PushTransform(m))
             {
                 var brush = new SolidColorBrush(color);
-                ctx.DrawGeometry(brush, null, StreamGeometry.Parse(DomePath));
-                ctx.DrawGeometry(brush, null, StreamGeometry.Parse(DotPath));
+                ctx.DrawGeometry(brush, null, StreamGeometry.Parse(TPath));
             }
         }
         using var ms = new MemoryStream();

@@ -103,7 +103,7 @@ public class TermitusConnectionGuardTests
     }
 
     [Test]
-    public async Task NetworkChange_WaitsUntilStable_ThenRestartsOnce()
+    public async Task NetworkChange_WaitsUntilStable_ThenProbesOnce()
     {
         var p = Policy();
         // Wi-Fi off → nothing → hotspot, changes 1 s apart (a typical hand-over).
@@ -112,10 +112,10 @@ public class TermitusConnectionGuardTests
         p.ObserveNetwork(Hotspot, T0.AddSeconds(2));
         await Assert.That(p.Next(true, true, T0.AddSeconds(3)).Action).IsEqualTo(TermitusGuardAction.None); // not settled
         var d = p.Next(true, true, T0.AddSeconds(2) + TermitusReconnectPolicy.NetworkSettle);
-        await Assert.That(d.Action).IsEqualTo(TermitusGuardAction.Recover);
+        await Assert.That(d.Action).IsEqualTo(TermitusGuardAction.CheckHealth); // a probe first, never a blind restart
         await Assert.That(d.Trigger).IsEqualTo(TermitusTrigger.NetworkChanged);
-        await Assert.That(d.Repick).IsFalse();
-        // No second restart for the same change.
+        p.ReportProbe(true);
+        // No second probe / restart for the same change.
         for (var i = 1; i < 30; i++)
         {
             await Assert.That(p.Next(true, true, T0.AddSeconds(10 + 2 * i)).Action).IsEqualTo(TermitusGuardAction.None);
@@ -123,38 +123,180 @@ public class TermitusConnectionGuardTests
     }
 
     [Test]
-    public async Task DeadTunnelAfterNetworkChange_Repicks()
+    public async Task DeadTunnelAfterNetworkChange_RestartsFirst_ThenSwitchesServer()
     {
         var p = Policy();
         p.ObserveNetwork(Hotspot, T0);
-        var first = p.Next(true, true, T0 + TermitusReconnectPolicy.NetworkSettle);
-        await Assert.That(first.Trigger).IsEqualTo(TermitusTrigger.NetworkChanged);
-        p.ReportProbe(false);
-        var d = p.Next(true, true, T0 + TermitusReconnectPolicy.NetworkSettle + TermitusReconnectPolicy.Backoff[0]);
-        await Assert.That(d.Action).IsEqualTo(TermitusGuardAction.Recover);
-        await Assert.That(d.Trigger).IsEqualTo(TermitusTrigger.TunnelDead);
-        await Assert.That(d.Repick).IsTrue();
+        var now = T0 + TermitusReconnectPolicy.NetworkSettle;
+        await Assert.That(p.Next(true, true, now).Action).IsEqualTo(TermitusGuardAction.CheckHealth);
+        p.ReportProbe(false); // failure 1
+        var fix1 = p.Next(true, true, now.AddSeconds(2));
+        await Assert.That(fix1.Action).IsEqualTo(TermitusGuardAction.Recover);
+        await Assert.That(fix1.Trigger).IsEqualTo(TermitusTrigger.TunnelDead);
+        await Assert.That(fix1.Repick).IsFalse(); // same server, just restart
+        p.ReportProbe(false); // failure 2, after the restart
+        await Assert.That(p.Next(true, true, now.AddSeconds(3)).Action).IsEqualTo(TermitusGuardAction.None); // backoff
+        var fix2 = p.Next(true, true, now.AddSeconds(2) + TermitusReconnectPolicy.Backoff[0]);
+        await Assert.That(fix2.Action).IsEqualTo(TermitusGuardAction.Recover);
+        await Assert.That(fix2.Repick).IsTrue(); // "after 2 failures switch"
     }
 
     [Test]
-    public async Task FlappingWifi_WithLiveCore_StopsRestartingAndNeverGivesUp()
+    public async Task GoodProbe_NeverRestartsTheCore()
     {
         var p = Policy();
         var now = T0;
-        var recovers = 0;
-        for (var i = 0; i < 200; i++)
+        for (var i = 0; i < 50; i++)
         {
             p.ObserveNetwork(i % 2 == 0 ? Hotspot : WiFi, now);
-            now = now.AddSeconds(10); // a change every 10 s, each one settles
+            now = now.AddSeconds(10);
             var d = p.Next(true, true, now);
+            await Assert.That(d.Action).IsNotEqualTo(TermitusGuardAction.Recover);
             await Assert.That(d.Action).IsNotEqualTo(TermitusGuardAction.GiveUp);
-            if (d.Action == TermitusGuardAction.Recover)
+            if (d.Action == TermitusGuardAction.CheckHealth)
             {
-                recovers++;
+                p.ReportProbe(true);
             }
         }
-        await Assert.That(recovers).IsEqualTo(TermitusReconnectPolicy.MaxAttempts);
+        await Assert.That(p.Attempts).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Wake_WaitsTwoSeconds_ThenProbes_AndOnlyWhenOnline()
+    {
+        var p = Policy();
+        p.ObserveWake(T0);
+        await Assert.That(p.Next(true, true, T0.AddSeconds(1)).Action).IsEqualTo(TermitusGuardAction.None);
+        await Assert.That(p.Next(true, false, T0.AddSeconds(3)).Action).IsEqualTo(TermitusGuardAction.None); // Wi-Fi not back yet
+        var d = p.Next(true, true, T0.AddSeconds(6));
+        await Assert.That(d.Action).IsEqualTo(TermitusGuardAction.CheckHealth);
+        await Assert.That(d.Trigger).IsEqualTo(TermitusTrigger.Woke);
+        await Assert.That(p.Next(true, true, T0.AddSeconds(8)).Action).IsEqualTo(TermitusGuardAction.None); // one probe per wake
+    }
+
+    [Test]
+    public async Task Wake_WithBrokenTunnel_MaxThreeFixesPer5Min_ThenNoConnectionOnce()
+    {
+        var p = Policy();
+        var now = T0;
+        var recovers = new List<(DateTime At, TermitusGuardDecision D)>();
+        var noConn = 0;
+        // Every probe fails, ticks every 2 s for 4.5 min, with a fresh wake every 20 s (a flapping lid / network).
+        for (var i = 0; i < 135; i++, now = now.AddSeconds(2))
+        {
+            if (i % 10 == 0)
+            {
+                p.ObserveWake(now);
+            }
+            var d = p.Next(true, true, now);
+            switch (d.Action)
+            {
+                case TermitusGuardAction.CheckHealth:
+                case TermitusGuardAction.Recover:
+                    if (d.Action == TermitusGuardAction.Recover)
+                    {
+                        recovers.Add((now, d));
+                    }
+                    p.ReportProbe(false);
+                    break;
+                case TermitusGuardAction.NoConnection:
+                    noConn++;
+                    break;
+            }
+        }
+        await Assert.That(recovers.Count).IsEqualTo(TermitusReconnectPolicy.MaxAliveAttempts);
+        await Assert.That(recovers.Select(r => r.D.Repick).ToArray()).IsEquivalentTo(new[] { false, true, true });
+        await Assert.That(noConn).IsEqualTo(1);
+        await Assert.That(p.NoConnection).IsTrue();
         await Assert.That(p.GaveUp).IsFalse();
+        // Backoff between fixes is honoured.
+        await Assert.That(recovers[1].At - recovers[0].At).IsGreaterThanOrEqualTo(TermitusReconnectPolicy.Backoff[0]);
+        await Assert.That(recovers[2].At - recovers[1].At).IsGreaterThanOrEqualTo(TermitusReconnectPolicy.Backoff[1]);
+    }
+
+    [Test]
+    public async Task NoConnection_UserClickReset_AllowsAFreshRound_AndAGoodProbeClearsIt()
+    {
+        var p = Policy();
+        var now = T0;
+        for (var i = 0; i < 200; i++, now = now.AddSeconds(2))
+        {
+            if (i % 10 == 0)
+            {
+                p.ObserveWake(now);
+            }
+            var d = p.Next(true, true, now);
+            if (d.Action is TermitusGuardAction.CheckHealth or TermitusGuardAction.Recover)
+            {
+                p.ReportProbe(false);
+            }
+        }
+        await Assert.That(p.NoConnection).IsTrue();
+        p.ReportProbe(true); // e.g. the next wake's probe passed
+        await Assert.That(p.NoConnection).IsFalse();
+        p.ReportProbe(false);
+        p.Reset(); // the user clicked «переподключить»
+        await Assert.That(p.NoConnection).IsFalse();
+        p.ObserveWake(now);
+        await Assert.That(p.Next(true, true, now.AddSeconds(2)).Action).IsEqualTo(TermitusGuardAction.CheckHealth);
+        p.ReportProbe(false);
+        await Assert.That(p.Next(true, true, now.AddSeconds(4)).Action).IsEqualTo(TermitusGuardAction.Recover);
+    }
+
+    [Test]
+    public async Task AliveFixes_AgeOutOfTheWindow()
+    {
+        var p = Policy();
+        var now = T0;
+        // Use up 3 fixes.
+        for (var i = 0; i < 3; i++)
+        {
+            p.ObserveWake(now);
+            now = now.AddSeconds(3);
+            await Assert.That(p.Next(true, true, now).Action).IsEqualTo(TermitusGuardAction.CheckHealth);
+            p.ReportProbe(false);
+            now = now.AddSeconds(2);
+            var d = p.Next(true, true, now);
+            if (d.Action != TermitusGuardAction.Recover)
+            {
+                now = now.AddSeconds(70);
+                d = p.Next(true, true, now);
+            }
+            await Assert.That(d.Action).IsEqualTo(TermitusGuardAction.Recover);
+        }
+        // 6 minutes later the window is empty again: a new wake is handled normally.
+        now = now.AddMinutes(6);
+        p.ObserveWake(now);
+        now = now.AddSeconds(3);
+        await Assert.That(p.Next(true, true, now).Action).IsEqualTo(TermitusGuardAction.CheckHealth);
+        p.ReportProbe(false);
+        await Assert.That(p.Next(true, true, now.AddSeconds(2)).Action).IsEqualTo(TermitusGuardAction.Recover);
+    }
+
+    [Test]
+    public async Task DeadCore_StillWinsOverAWakeProbe()
+    {
+        var p = Policy();
+        p.ObserveWake(T0);
+        p.Next(false, true, T0);
+        var d = p.Next(false, true, T0.AddSeconds(2));
+        await Assert.That(d.Action).IsEqualTo(TermitusGuardAction.Recover);
+        await Assert.That(d.Trigger).IsEqualTo(TermitusTrigger.CoreDied);
+    }
+
+    [Test]
+    public async Task WakeDetector_TreatsABigGapAsSleep_NotNormalTicks()
+    {
+        var w = new TermitusWakeDetector();
+        await Assert.That(w.Observe(T0)).IsFalse(); // first sample
+        for (var i = 1; i < 30; i++)
+        {
+            await Assert.That(w.Observe(T0.AddSeconds(2 * i))).IsFalse();
+        }
+        var last = T0.AddSeconds(58);
+        await Assert.That(w.Observe(last.AddSeconds(8))).IsFalse();           // a slow tick is not sleep
+        await Assert.That(w.Observe(last.AddSeconds(8 + 3600))).IsTrue();     // lid closed for an hour
+        await Assert.That(w.Observe(last.AddSeconds(8 + 3602))).IsFalse();    // once per wake
     }
 
     [Test]

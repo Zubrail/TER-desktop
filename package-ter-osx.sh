@@ -17,9 +17,27 @@ VERSION="${1:-$FILE_VERSION}"
 PUB="$HERE/upstream/v2rayN/bin/termitus/osx-arm64"
 # 14.10: always publish fresh (a stale publish dir once shipped old code under a new version, LESSONS 29)
 rm -rf "$PUB"
+# LESSONS 45: no build-machine path (Mac user name) inside the binaries / client logs (CallerFilePath).
+UP_REAL="$(cd "$HERE/upstream/v2rayN" && pwd -P)"
+PATHMAP="$UP_REAL=/src"
+[ "$UP_REAL" = "$HERE/upstream/v2rayN" ] || PATHMAP="$PATHMAP%2C$HERE/upstream/v2rayN=/src"
+# 0.6.5 D-1: pin the bundled cores INSIDE the binary. The privileged macOS helper accepts a core only if its sha256 equals the one
+# compiled in here (a hash computed at run time from the user-writable data folder would prove nothing).
+XRAY_BIN="$HERE/cores/x/xray"; SB_BIN="$(ls "$HERE"/cores/s/*/sing-box 2>/dev/null | head -1)"
+[ -f "$XRAY_BIN" ] && [ -f "$SB_BIN" ] || { echo "cores missing in $HERE/cores (cannot pin their checksums)"; exit 1; }
+# The bundle is ad-hoc signed below, which rewrites the cores' Mach-O signature: pin the hash of the SIGNED core (same file name = same
+# identifier, ad-hoc signing is deterministic). A gate after signing checks that the real .app matches.
+PIN_TMP="$(mktemp -d)"; cp "$XRAY_BIN" "$PIN_TMP/xray"; cp "$SB_BIN" "$PIN_TMP/sing-box"
+codesign --force -s - "$PIN_TMP/xray" "$PIN_TMP/sing-box" 2>/dev/null || { echo "codesign of the pinned cores failed"; exit 1; }
+CORE_HASHES="xray=$(shasum -a 256 "$PIN_TMP/xray" | cut -d' ' -f1);sing-box=$(shasum -a 256 "$PIN_TMP/sing-box" | cut -d' ' -f1)"
+rm -rf "$PIN_TMP"
+HASH_SRC="$HERE/upstream/v2rayN/ServiceLib/Services/TermitusCoreHashes.cs"
+[ -f "$HASH_SRC" ] || { echo "TermitusCoreHashes.cs missing: run apply-changes.sh first"; exit 1; }
+sed -i '' -E "s|(private const string Raw = \")[^\"]*(\";)|\1$CORE_HASHES\2|" "$HASH_SRC"
+grep -q "xray=[0-9a-f]\{64\};sing-box=" "$HASH_SRC" || { echo "failed to embed core hashes"; exit 1; }
 (cd "$HERE/upstream/v2rayN" && DOTNET_ROOT=$HOME/.dotnet "$HOME/.dotnet/dotnet" publish v2rayN.Desktop/v2rayN.Desktop.csproj \
   -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true \
-  -p:Version="$VERSION" -o "$PUB" -nologo -v q) || { echo "dotnet publish failed"; exit 1; }
+  -p:Version="$VERSION" "-p:PathMap=$PATHMAP" -p:Deterministic=true -o "$PUB" -nologo -v q) || { echo "dotnet publish failed"; exit 1; }
 CORES="$HERE/cores"
 DIST="$HERE/dist"
 APP="$DIST/TER.app"
@@ -113,6 +131,13 @@ EOF
 # Developer ID signing + notarization comes later (BUILD.md section 6).
 codesign --force --deep -s - "$APP"
 codesign --verify --deep "$APP" && echo "codesign (ad-hoc): ok"
+# D-1 gate: the cores inside the finished bundle must be exactly the ones whose hashes are compiled into the app
+for pair in "xray:$APP/Contents/MacOS/bin/xray/xray" "sing-box:$APP/Contents/MacOS/bin/sing_box/sing-box"; do
+  n="${pair%%:*}"; f="${pair#*:}"
+  want="$(grep -o "$n=[0-9a-f]\{64\}" "$HASH_SRC" | head -1 | cut -d= -f2)"; got="$(shasum -a 256 "$f" | cut -d' ' -f1)"
+  [ -n "$want" ] && [ "$want" = "$got" ] || { echo "REFUSING: bundled $n ($got) does not match the pinned hash ($want): TUN would be refused at run time"; exit 1; }
+done
+echo "core pins: ok"
 
 DMG="$DIST/TER-${VERSION}-osx-arm64.dmg"
 rm -f "$DMG"

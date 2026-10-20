@@ -296,7 +296,7 @@ public static class TermitusUpdater
     public static string UpdatesDir()
     {
         var d = Path.Combine(Utils.GetTempPath(), "updates");
-        Directory.CreateDirectory(d);
+        PrivateDir(d);
         return d;
     }
 
@@ -314,6 +314,127 @@ public static class TermitusUpdater
         catch (Exception ex)
         {
             Logging.SaveLog($"{_tag}: cleanup failed ({ex.GetType().Name})");
+        }
+    }
+
+
+    /// <summary>
+    /// 0.6.5 security review D-7: a staging folder only the current user can enter (0700 on macOS/Linux; on Windows the
+    /// per-user AppData ACL already excludes other accounts and <see cref="TermitusWinHarden"/> tightens it). Created if missing,
+    /// the mode is enforced even when it existed.
+    /// </summary>
+    public static void PrivateDir(string dir)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(dir);
+            TermitusWinHarden.RestrictToCurrentUser(dir);
+            return;
+        }
+        const UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+        if (!Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir, mode);
+        }
+        File.SetUnixFileMode(dir, mode);
+    }
+
+    /// <summary>
+    /// Verify-then-use in ONE pass: reads <paramref name="src"/> through a single handle, writes the bytes to a new file in
+    /// <paramref name="destDir"/> (created exclusively, read-only) and compares the sha256 of exactly those bytes with the signed
+    /// one. What the caller mounts/installs afterwards is the sealed copy, never the path that was verified earlier.
+    /// Null (and nothing left behind) on any mismatch or I/O error.
+    /// </summary>
+    public static string? SealFile(string src, string expectedSha256, string destDir)
+    {
+        string? dest = null;
+        try
+        {
+            PrivateDir(destDir);
+            dest = Path.Combine(destDir, "sealed-" + Guid.NewGuid().ToString("N") + Path.GetExtension(src));
+            using var sha = SHA256.Create();
+            using (var input = new FileStream(src, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var output = new FileStream(dest, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                var buf = new byte[81920];
+                int n;
+                while ((n = input.Read(buf, 0, buf.Length)) > 0)
+                {
+                    sha.TransformBlock(buf, 0, n, null, 0);
+                    output.Write(buf, 0, n);
+                }
+            }
+            sha.TransformFinalBlock([], 0, 0);
+            if (!string.Equals(Convert.ToHexString(sha.Hash!), expectedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                TryDelete(dest);
+                return null;
+            }
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(dest, UnixFileMode.UserRead);
+            }
+            return dest;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            if (dest != null)
+            {
+                TryDelete(dest);
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Deterministic sha256 over a staged tree: every entry's relative path, its type, the bytes of files and the target of
+    /// symlinks (never followed). Recorded right after staging and compared again just before the swap starts.
+    /// </summary>
+    public static string? TreeHash(string root)
+    {
+        try
+        {
+            using var sha = SHA256.Create();
+            void Add(string text)
+            {
+                var b = System.Text.Encoding.UTF8.GetBytes(text + "\n");
+                sha.TransformBlock(b, 0, b.Length, null, 0);
+            }
+            void Walk(string dir, string rel)
+            {
+                var entries = new DirectoryInfo(dir).GetFileSystemInfos().OrderBy(e => e.Name, StringComparer.Ordinal).ToList();
+                foreach (var e in entries)
+                {
+                    var r = rel.Length == 0 ? e.Name : rel + "/" + e.Name;
+                    if (e.LinkTarget != null)
+                    {
+                        Add("L " + r + " -> " + e.LinkTarget);
+                    }
+                    else if (e is DirectoryInfo d)
+                    {
+                        Add("D " + r);
+                        Walk(d.FullName, r);
+                    }
+                    else if (e is FileInfo f)
+                    {
+                        Add("F " + r + " " + f.Length);
+                        using var fs = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        var buf = new byte[81920];
+                        int n;
+                        while ((n = fs.Read(buf, 0, buf.Length)) > 0)
+                        {
+                            sha.TransformBlock(buf, 0, n, null, 0);
+                        }
+                    }
+                }
+            }
+            Walk(root, string.Empty);
+            sha.TransformFinalBlock([], 0, 0);
+            return Convert.ToHexString(sha.Hash!).ToLowerInvariant();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 
@@ -476,7 +597,7 @@ public static class TermitusUpdater
         return (Val("CFBundleIdentifier"), Val("CFBundleShortVersionString"));
     }
 
-    public sealed record StagedApp(string AppPath, string Version);
+    public sealed record StagedApp(string AppPath, string Version, string? TreeHash = null);
 
     private static async Task<(int Code, string Output)> RunAsync(string exe, IEnumerable<string> args, TimeSpan timeout)
     {
@@ -512,15 +633,27 @@ public static class TermitusUpdater
     /// Mounts the verified dmg read-only (no Finder window), checks that it holds TER.app with our bundle id
     /// and the announced version, copies it to a staging folder, unmounts. Null = not usable.
     /// </summary>
-    public static async Task<StagedApp?> StageFromDmgAsync(string dmgPath, string expectedVersion, string bundleId)
+    public static async Task<StagedApp?> StageFromDmgAsync(string dmgPath, string expectedVersion, string bundleId, string? expectedSha256 = null)
     {
         var work = Path.GetDirectoryName(dmgPath)!;
+        PrivateDir(work);
         var mount = Path.Combine(work, "mnt");
         var stage = Path.Combine(work, "stage");
-        Directory.CreateDirectory(mount);
+        PrivateDir(mount);
         var attached = false;
         try
         {
+            // D-7: what gets mounted is a sealed copy made from ONE read of the file, checked against the signed sha256 in the same pass.
+            if (expectedSha256 != null)
+            {
+                var sealedDmg = SealFile(dmgPath, expectedSha256, Path.Combine(work, "sealed"));
+                if (sealedDmg == null)
+                {
+                    Logging.SaveLog($"{_tag}: the downloaded dmg changed after it was verified; refusing to install it");
+                    return null;
+                }
+                dmgPath = sealedDmg;
+            }
             if (Directory.Exists(stage))
             {
                 Directory.Delete(stage, true);
@@ -552,7 +685,14 @@ public static class TermitusUpdater
                 Logging.SaveLog($"{_tag}: ditto failed ({c.Code})");
                 return null;
             }
-            return new StagedApp(dest, ver);
+            // D-7: the staged bundle must still be a validly signed bundle, and its tree is pinned for the swap.
+            var cs = await RunAsync("/usr/bin/codesign", ["--verify", "--deep", "--strict", dest], TimeSpan.FromSeconds(120));
+            if (cs.Code != 0)
+            {
+                Logging.SaveLog($"{_tag}: codesign verification of the staged app failed ({cs.Code})");
+                return null;
+            }
+            return new StagedApp(dest, ver, TreeHash(dest));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
@@ -569,10 +709,16 @@ public static class TermitusUpdater
     }
 
     /// <summary>Starts the detached swap helper. The caller must quit TER right after.</summary>
-    public static bool StartSwap(string stagedApp, string targetApp, bool openAfter)
+    public static bool StartSwap(string stagedApp, string targetApp, bool openAfter, string? expectedTreeHash = null)
     {
         try
         {
+            // D-7: the tree that is about to be installed must be the one that was staged (and checked).
+            if (expectedTreeHash != null && !string.Equals(TreeHash(stagedApp), expectedTreeHash, StringComparison.Ordinal))
+            {
+                Logging.SaveLog($"{_tag}: the staged app changed before the swap; refusing");
+                return false;
+            }
             var script = Path.Combine(Path.GetDirectoryName(stagedApp)!, "swap.sh");
             File.WriteAllText(script, SwapScript.Replace("\r\n", "\n"));
             var psi = new ProcessStartInfo("/usr/bin/nohup") { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
