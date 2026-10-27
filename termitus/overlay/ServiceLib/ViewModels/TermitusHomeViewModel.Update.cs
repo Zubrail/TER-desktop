@@ -312,10 +312,19 @@ public partial class TermitusHomeViewModel
                 return;
             }
 
-            // The swap helper waits for this process to exit, so leave cleanly.
-            await PreUpdateCleanupAsync();
+            // Confirm the waiting helper is alive before stopping the working connection.
             var open = !(TermitusTestHooks.IsTestInstance && !TermitusTestHooks.UpdateTarget.IsNullOrEmpty());
-            if (!TermitusUpdater.StartSwap(staged.AppPath, target!, open, staged.TreeHash))
+            if (!TermitusUpdater.StartSwap(staged.AppPath, target!, open, staged.TreeHash, info.Version))
+            {
+                OnUi(() =>
+                {
+                    SetUpdateStage(UpdateStage.Failed);
+                    UpdateStatusText = Loc.UpdateStageFailed;
+                });
+                return;
+            }
+            await PreUpdateCleanupAsync();
+            if (!TermitusUpdater.ArmSwap())
             {
                 OnUi(() =>
                 {

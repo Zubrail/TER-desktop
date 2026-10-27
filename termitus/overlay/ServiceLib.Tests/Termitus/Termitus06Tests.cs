@@ -178,7 +178,7 @@ public class Termitus06Tests
             p.WaitForExit(20000);
             await Assert.That(p.ExitCode).IsEqualTo(0);
             await Assert.That(File.ReadAllText(Path.Combine(target, "Contents", "v.txt"))).IsEqualTo("new");
-            await Assert.That(Directory.Exists(target + ".old-ter-update")).IsFalse();
+            await Assert.That(Directory.Exists(target + ".old-ter-update")).IsTrue(); // retained until new UI confirms startup
 
             // failure: the new bundle is missing -> the old one is put back untouched
             var p2 = Process.Start(new ProcessStartInfo("/bin/bash") { ArgumentList = { script, dead.Id.ToString(), Path.Combine(root, "nope", "TER.app"), target, "0" } })!;

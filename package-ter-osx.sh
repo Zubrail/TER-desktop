@@ -130,7 +130,7 @@ EOF
 # Ad-hoc signature: Apple Silicon refuses to run unsigned arm64 code. Real
 # Developer ID signing + notarization comes later (BUILD.md section 6).
 codesign --force --deep -s - "$APP"
-codesign --verify --deep "$APP" && echo "codesign (ad-hoc): ok"
+codesign --verify --deep --strict "$APP" && echo "codesign (ad-hoc): ok"
 # D-1 gate: the cores inside the finished bundle must be exactly the ones whose hashes are compiled into the app
 for pair in "xray:$APP/Contents/MacOS/bin/xray/xray" "sing-box:$APP/Contents/MacOS/bin/sing_box/sing-box"; do
   n="${pair%%:*}"; f="${pair#*:}"
@@ -158,5 +158,6 @@ else
   hdiutil create -quiet -volname "TER" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 fi
 rm -rf "$STAGE"
+bash "$HERE/termitus/tools/verify_mac_dmg.sh" "$DMG" "$VERSION"
 shasum -a 256 "$DMG" | tee "$DMG.sha256"
 echo "built: $DMG"

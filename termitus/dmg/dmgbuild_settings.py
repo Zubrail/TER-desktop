@@ -11,7 +11,8 @@ filesystem = "HFS+"
 files = [app]
 symlinks = {"Applications": "/Applications"}
 icon = defines.get("icon")  # noqa: F821  volume icon
-hide_extensions = [appname]
+# SetFile would add FinderInfo to the already signed bundle and break strict verification.
+hide_extensions = []
 
 background = defines["bg"]  # noqa: F821  retina tiff (600x400 @1x/@2x)
 window_rect = ((200, 120), (600, 400))

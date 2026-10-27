@@ -34,6 +34,7 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
 
     private TermitusHomeViewModel? _vm;
     private Window? _window;
+    private bool _updateStartupConfirmationQueued;
     private readonly List<Visual> _watchedAncestors = [];
 
     public TermitusHomeView()
@@ -466,6 +467,18 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
             && _window.WindowState != WindowState.Minimized
             && IsEffectivelyVisible;
         _vm?.SetUiActive(active);
+        if (active && OperatingSystem.IsMacOS() && !_updateStartupConfirmationQueued && _window != null)
+        {
+            _updateStartupConfirmationQueued = true;
+            // Two frames: the new main view is shown and has completed layout/render.
+            _window.RequestAnimationFrame(frameTime => _window?.RequestAnimationFrame(nextFrameTime =>
+            {
+                if (_window?.IsVisible == true && TermitusUpdater.CurrentBundle() is { } bundle)
+                    _ = Task.Run(() => TermitusUpdater.ConfirmMacStartup(bundle, Utils.GetVersionInfo()));
+                else
+                    _updateStartupConfirmationQueued = false;
+            }));
+        }
     }
 
     #endregion Window visibility -> VM.UiActive

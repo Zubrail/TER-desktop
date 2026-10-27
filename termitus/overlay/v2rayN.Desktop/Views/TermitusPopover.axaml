@@ -161,7 +161,7 @@
                     <Path Grid.Column="2" x:Name="countryChevron" Width="9" Height="6" VerticalAlignment="Center" Data="M1 1 L5 5 L9 1" Stretch="Uniform" Stroke="{DynamicResource TermMuted}" StrokeLineCap="Round" StrokeThickness="1.6" />
                 </Grid>
             </Button>
-            <ScrollViewer x:Name="countryList" MaxHeight="176" IsVisible="False" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer x:Name="countryList" MaxHeight="176" Padding="0,2,14,2" IsVisible="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="4">
                     <Button Classes="pop-row" Classes.selected="{Binding IsAutoChoice}" Command="{Binding SelectLocationCmd}" CommandParameter="">
                         <StackPanel Orientation="Horizontal" Spacing="10">

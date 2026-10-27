@@ -1,0 +1,65 @@
+{
+  "source_release": "https://github.com/XTLS/Xray-core/releases/tag/v26.10.21",
+  "tag": "v26.10.21",
+  "published_at": "2026-10-21T12:07:11Z",
+  "assets": [
+    {
+      "file": "Xray-macos-arm64-v8a.zip",
+      "sha256": "926cc55fda2a8757dabe4f22dc98772f218ace025f101bd0b68aee232e59d5dc",
+      "github_digest": "sha256:926cc55fda2a8757dabe4f22dc98772f218ace025f101bd0b68aee232e59d5dc",
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-macos-arm64-v8a.zip",
+      "size": 13669145
+    },
+    {
+      "file": "Xray-macos-arm64-v8a.zip.dgst",
+      "sha256": "deacfa3753cc3b21e26318c673f532654b62ccfb07783b53486f754dc7c56a99",
+      "github_digest": "sha256:deacfa3753cc3b21e26318c673f532654b62ccfb07783b53486f754dc7c56a99",
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-macos-arm64-v8a.zip.dgst",
+      "size": 299
+    },
+    {
+      "file": "Xray-windows-64.zip",
+      "sha256": "fc58c39ee2f2717b4c54d28d374362389e5319b20ae44aea76ea45a5243ec827",
+      "github_digest": "sha256:fc58c39ee2f2717b4c54d28d374362389e5319b20ae44aea76ea45a5243ec827",
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-windows-64.zip",
+      "size": 15029603
+    },
+    {
+      "file": "Xray-windows-64.zip.dgst",
+      "sha256": "6cd5a800c214c31bd2a64aeef6b40132f6afdd766c2877e44942d82341a76891",
+      "github_digest": "sha256:6cd5a800c214c31bd2a64aeef6b40132f6afdd766c2877e44942d82341a76891",
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-windows-64.zip.dgst",
+      "size": 299
+    }
+  ],
+  "singbox_reused_version": "v1.14.2",
+  "rf_reused_version": "202610050005",
+  "copied_inputs_not_original_modified": true,
+  "singbox_assets": [
+    {
+      "file": "sing-box-1.14.2-darwin-arm64.tar.gz",
+      "sha256": "925c5382eca8492b0150f868a6db20b18290a38700e621724b3703fd453e032d",
+      "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.2/sing-box-1.14.2-darwin-arm64.tar.gz",
+      "reused_cache": true
+    },
+    {
+      "file": "sing-box-1.14.2-windows-amd64.zip",
+      "sha256": "c2d8bfff918755808781dfdeeb8581b6c91eb3a243d9a7b55483cfc0c0684d32",
+      "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.2/sing-box-1.14.2-windows-amd64.zip",
+      "reused_cache": true
+    }
+  ],
+  "input_members": {
+    "x/xray": "94a9bfc0df6a0462552d535861f8a1580a0a6c94f7b0d30fe312daa0024ede2e",
+    "win/x/xray.exe": "c77a00eb84fb93ae044c2d771a1cabcc033b81e487253fbc35b12df6879c1e15",
+    "win/x/wintun.dll": "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce",
+    "s/sing-box-1.14.2-darwin-arm64/sing-box": "d652879eed7e38b866fa980bc2e119dcdb13968fe5e6583670293a258686d0e7",
+    "win/s/sing-box-1.14.2-windows-amd64/sing-box.exe": "7bbef1dea9189ee12799ae834ea4b4658355da25c47a21ad8804904c0ccd9410",
+    "win/s/sing-box-1.14.2-windows-amd64/libcronet.dll": "3217c6260fbca5f16072e0b79735742f40109a63bb0ff88fd6b96dd6b54a2928",
+    "rf/geoip.dat": "abed8a906f52d736708a9905f586fd34af3da20d123baea522882f56243fa9c9",
+    "rf/geosite.dat": "76fdbe01687a6cc7683b50c38ceea84941458e8371d215918daf555665a537cd"
+  },
+  "upstream_v2rayn_commit": "3666fc549dd57a5360c5782ea7e21556b00887d7",
+  "globalhotkeys_commit": "162d401dfe0140b41d1fa349b9aadb4060e739b1",
+  "rootca_change_source": "https://github.com/XTLS/Xray-core/releases/tag/v26.10.21"
+}

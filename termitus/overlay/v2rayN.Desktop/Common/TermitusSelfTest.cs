@@ -48,6 +48,7 @@ namespace v2rayN.Desktop.Common;
 ///   scroll-acct:FRACTION   scroll the account page (0 top .. 1 bottom)   dump3:LABEL   log the Account 2.0 state
 ///   0.6.5: trial-consent[:0|1] tick the consent box   trial   «Попробовать бесплатно»   trial-bot   «Открыть бота» (refusal card)   trial-bind   «Привязать к Telegram» (login with the trial code)
 ///   invite   «Пригласить друга» on Home (opens the QR sheet)   acc-close closes it   dump4:LABEL   log the trial / invite state
+///   size:WxH         resize the window (DIPs)   crash   Debug only: unhandled UI exception (crash report flow)
 ///   quit             close the app
 /// </summary>
 internal static class TermitusSelfTest
@@ -395,6 +396,23 @@ internal static class TermitusSelfTest
                 case "shot":
                     await NextFrameAsync(view);
                     Shot(view, arg);
+                    break;
+
+                case "size": // size:WxH (DIPs) resize the window, e.g. 1093,614 = a 1366x768 screen at 125 % scaling
+                    if (TopLevel.GetTopLevel(view) is Window win && arg.Split('x') is [var sw, var sh])
+                    {
+                        win.WindowState = WindowState.Normal;
+                        win.Width = double.Parse(sw, System.Globalization.CultureInfo.InvariantCulture);
+                        win.Height = double.Parse(sh, System.Globalization.CultureInfo.InvariantCulture);
+                        await Task.Delay(600);
+                    }
+                    break;
+
+                case "crash": // 0.6.5, Debug builds only: an unhandled exception on the UI thread (crash report flow)
+#if DEBUG
+                    Dispatcher.UIThread.Post(() => throw new InvalidOperationException("TER test crash https://termitus.online/sub/ABCDEF123456 203.0.113.9 C:\\Users\\Ivan\\x.cs"));
+                    await Task.Delay(3000);
+#endif
                     break;
 
                 case "quit":

@@ -40,6 +40,10 @@ say() { printf '\n== %s\n' "$*"; }
 run() { if [ "$DRY" = 1 ]; then printf '   (dry) %s\n' "$*"; else "$@"; fi; }
 sha() { shasum -a 256 "$1" | awk '{print $1}'; }
 
+# Always validate the final artifact, including resumed releases (--from).
+# Do not wrap in run(): dry-run must also catch an unusable updater payload.
+bash "$TOOLS/verify_mac_dmg.sh" "$DMG" "$V"
+
 if [ "$FROM" -le 1 ]; then
   say "1/5 check TER $V"
   [ -z "$(git -C "$HERE" status --porcelain -- . ':!upstream' ':!dist')" ] || { echo "REFUSING: uncommitted changes"; exit 1; }
@@ -79,16 +83,18 @@ if [ "$FROM" -le 4 ]; then
   DSHA="$(sha "$DMG")"
   sub="s#TER-[0-9][0-9.]*-osx-arm64\\.dmg#TER-$V-osx-arm64.dmg#g; s#TER [0-9]\\.[0-9]\\.[0-9][0-9]*#TER $V#g; s#<code>[0-9a-f]\\{64\\}</code>#<code>$DSHA</code>#g"
   pages="static/ter-mac.html"
+  # 21.10: check BEFORE touching any page (the win sed used to run first and then trip this very check)
+  run ssh "$MASTER" "cd $SITE_REPO && ! git status --porcelain | grep -v '^??'" || { echo "REFUSING: master repo dirty"; exit 1; }
   if [ "$WIN" = 1 ]; then
     ZSHA="$(sha "$ZIP")"   # ter-win.html shows only the zip's hash
     run ssh "$MASTER" "cd $SITE_REPO && test -f static/ter-win.html && sed -i 's#TER-[0-9][0-9.]*-win-x64\\.zip#TER-$V-win-x64.zip#g; s#TER [0-9]\\.[0-9]\\.[0-9][0-9]*#TER $V#g; s#<code>[0-9a-f]\\{64\\}</code>#<code>$ZSHA</code>#g' static/ter-win.html"
     pages="$pages static/ter-win.html"
   fi
-  run ssh "$MASTER" "set -e; cd $SITE_REPO; git status --porcelain | grep -v '^??' && { echo 'REFUSING: master repo dirty'; exit 1; } || true; \
+  run ssh "$MASTER" "set -e; cd $SITE_REPO; \
     sed -i '$sub' static/ter-mac.html; git add $pages; \
     if git diff --cached --quiet; then echo '   site already on $V'; else \
       git -c user.name='TER release' -c user.email='noreply@termitus.online' commit -q -m 'Site: TER $V download links + sha'; \
-      chown vpnscripts:vpnplatform $pages; chmod 664 $pages; \
+      chown vpnscripts:vpnplatform $pages; chmod g+w $pages;  # g+w keeps the git file mode (LESSONS L56) \
       git -c credential.helper='!gh auth git-credential' push -q origin HEAD:main; git log --oneline -1; fi"
 fi
 

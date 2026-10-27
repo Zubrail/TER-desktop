@@ -1090,9 +1090,9 @@
             <!-- Location picker -->
             <Grid
                 x:Name="pagePicker"
-                Width="560"
-                Margin="0,8,0,16"
-                HorizontalAlignment="Center"
+                MaxWidth="560"
+                Margin="16,8,16,16"
+                HorizontalAlignment="Stretch"
                 IsVisible="{Binding ShowPicker}"
                 RowDefinitions="Auto,Auto,*">
                 <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
@@ -1157,7 +1157,7 @@
                     Text="{Binding Loc.PickerHint}"
                     TextWrapping="Wrap" />
 
-                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="2" Padding="0,2,14,2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <!-- Auto -->
                         <Button
@@ -1249,8 +1249,8 @@
             </Grid>
 
             <!-- 0.6: Проверка подключения -->
-            <ScrollViewer x:Name="pageCheck" IsVisible="{Binding ShowCheck}" VerticalScrollBarVisibility="Auto">
-                <StackPanel Width="560" Margin="0,28,0,24" HorizontalAlignment="Center">
+            <ScrollViewer x:Name="pageCheck" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding ShowCheck}" VerticalScrollBarVisibility="Auto">
+                <StackPanel MaxWidth="560" Margin="16,28,16,24" HorizontalAlignment="Stretch">
                     <TextBlock Classes="term-h1" Text="{Binding Loc.CheckTitle}" />
                     <TextBlock Margin="4,0,0,14" Classes="term-hint" Text="{Binding Loc.CheckSubtitle}" TextWrapping="Wrap" />
                     <StackPanel Margin="0,0,0,14" Orientation="Horizontal" Spacing="12">
@@ -1309,8 +1309,8 @@
             </ScrollViewer>
 
             <!-- Settings -->
-            <ScrollViewer x:Name="pageSettings" IsVisible="{Binding ShowSettings}" VerticalScrollBarVisibility="Auto">
-                <StackPanel Width="560" Margin="0,28,0,24" HorizontalAlignment="Center">
+            <ScrollViewer x:Name="pageSettings" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding ShowSettings}" VerticalScrollBarVisibility="Auto">
+                <StackPanel MaxWidth="560" Margin="16,28,16,24" HorizontalAlignment="Stretch">
                     <TextBlock Classes="term-h1" Text="{Binding Loc.SettingsTitle}" />
 
                     <TextBlock Classes="term-section" Text="{Binding Loc.SettingsStartup}" />
@@ -1515,8 +1515,8 @@
             </ScrollViewer>
 
             <!-- Account: subscription status, traffic, devices -->
-            <ScrollViewer x:Name="pageAccount" IsVisible="{Binding ShowAccount}" VerticalScrollBarVisibility="Auto">
-                <StackPanel Width="560" Margin="0,28,0,24" HorizontalAlignment="Center">
+            <ScrollViewer x:Name="pageAccount" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding ShowAccount}" VerticalScrollBarVisibility="Auto">
+                <StackPanel MaxWidth="560" Margin="16,28,16,24" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Classes="term-h1" Text="{Binding Loc.AccountTitle}" />
                         <Button
@@ -1891,8 +1891,8 @@
             </ScrollViewer>
 
             <!-- Support: knowledge base + contact -->
-            <ScrollViewer x:Name="pageSupport" IsVisible="{Binding ShowSupport}" VerticalScrollBarVisibility="Auto">
-                <StackPanel Width="560" Margin="0,28,0,24" HorizontalAlignment="Center">
+            <ScrollViewer x:Name="pageSupport" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding ShowSupport}" VerticalScrollBarVisibility="Auto">
+                <StackPanel MaxWidth="560" Margin="16,28,16,24" HorizontalAlignment="Stretch">
                     <TextBlock Classes="term-h1" Text="{Binding Loc.SupportTitle}" />
 
                     <!-- 0.6: report a problem / connection check -->

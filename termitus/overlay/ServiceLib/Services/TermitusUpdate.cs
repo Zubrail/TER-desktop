@@ -263,6 +263,8 @@ public static class TermitusUpdater
     public static readonly TimeSpan CheckEvery = TimeSpan.FromHours(6);
     public const string GenericUserAgent = "TER";
     public const long MaxDownloadBytes = 600L * 1024 * 1024;
+    private static Process? _swapHelper;
+    private static string? _swapArmFile;
 
     public static string ManifestUrl => TermitusTestHooks.IsTestInstance && !TermitusTestHooks.UpdateUrl.IsNullOrEmpty()
         ? TermitusTestHooks.UpdateUrl!
@@ -440,9 +442,9 @@ public static class TermitusUpdater
 
     public enum DownloadKind { Ok, Offline, BadStatus, TooBig, HashMismatch, IoError }
 
-    /// <summary>Downloads to <paramref name="destPath"/> and checks the SIGNED sha256. The file is deleted on any failure.</summary>
+    /// <summary>Downloads and checks the SIGNED sha256. Failed partial files are removed; a complete file is replaced only after verification.</summary>
     public static async Task<DownloadKind> DownloadAsync(TermitusUpdateInfo info, string destPath, int? socksPort,
-        Action<long, long?> progress, CancellationToken ct)
+        Action<long, long?> progress, CancellationToken ct, TimeSpan? inactivityTimeout = null, TimeSpan? attemptTimeout = null)
     {
         var part = destPath + ".part";
         try
@@ -451,11 +453,16 @@ public static class TermitusUpdater
             int?[] routes = socksPort is > 0 ? [socksPort, null] : [null];
             foreach (var port in routes)
             {
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                attempt.CancelAfter(attemptTimeout ?? TimeSpan.FromMinutes(15));
+                using var idle = CancellationTokenSource.CreateLinkedTokenSource(attempt.Token);
+                var idleLimit = inactivityTimeout ?? TimeSpan.FromSeconds(45);
+                idle.CancelAfter(idleLimit);
                 try
                 {
                     using var req = new HttpRequestMessage(HttpMethod.Get, info.Url);
                     req.Headers.UserAgent.TryParseAdd(GenericUserAgent);
-                    using var resp = await TermitusHttp.ClientFor(port).SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+                    using var resp = await TermitusHttp.ClientFor(port).SendAsync(req, HttpCompletionOption.ResponseHeadersRead, idle.Token);
                     if (!resp.IsSuccessStatusCode)
                     {
                         return DownloadKind.BadStatus;
@@ -467,20 +474,22 @@ public static class TermitusUpdater
                     }
                     using var sha = SHA256.Create();
                     long done = 0;
-                    await using (var src = await resp.Content.ReadAsStreamAsync(ct))
+                    await using (var src = await resp.Content.ReadAsStreamAsync(idle.Token))
                     await using (var dst = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None))
                     {
                         var buf = new byte[81920];
-                        int n;
-                        while ((n = await src.ReadAsync(buf, ct)) > 0)
+                        while (true)
                         {
+                            idle.CancelAfter(idleLimit);
+                            var n = await src.ReadAsync(buf, idle.Token);
+                            if (n == 0) break;
                             done += n;
                             if (done > MaxDownloadBytes)
                             {
                                 return DownloadKind.TooBig;
                             }
                             sha.TransformBlock(buf, 0, n, null, 0);
-                            await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                            await dst.WriteAsync(buf.AsMemory(0, n), idle.Token);
                             progress(done, total);
                         }
                     }
@@ -493,11 +502,15 @@ public static class TermitusUpdater
                     File.Move(part, destPath, true);
                     return DownloadKind.Ok;
                 }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    Logging.SaveLog($"{_tag}: download timed out via {(port == null ? "direct" : "proxy")}");
+                }
                 catch (OperationCanceledException)
                 {
                     throw;
                 }
-                catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
+                catch (Exception ex) when (ex is HttpRequestException or IOException)
                 {
                     Logging.SaveLog($"{_tag}: download failed via {(port == null ? "direct" : "proxy")} ({ex.GetType().Name})");
                 }
@@ -536,25 +549,110 @@ public static class TermitusUpdater
     /// <summary>
     /// Helper run after TER quits: waits for the old process, swaps the bundle (old one is kept as
     /// "*.old-ter-update" until the new one is in place, put back if the move fails), starts the new TER.
-    /// Arguments (never interpolated into shell text): PID NEW_APP TARGET_APP OPEN(1|0).
+    /// Arguments (never interpolated into shell text): PID NEW_APP TARGET_APP OPEN(1|0) VERSION READY ARM.
     /// </summary>
     public const string SwapScript = """
         #!/bin/bash
-        PID="$1"; NEW="$2"; TARGET="$3"; DOOPEN="$4"
+        PID="$1"; NEW="$2"; TARGET="$3"; DOOPEN="$4"; VERSION="$5"; READY="$6"; ARM="$7"
+        if [ -n "$READY" ]; then (umask 077; set -C; : > "$READY") || exit 5; fi
+        # Preparation is two-phase: no PID countdown until VPN cleanup has completed.
+        if [ -n "$ARM" ]; then
+          for i in $(seq 1 400); do [ -f "$ARM" ] && break; sleep 0.3; done
+          [ -f "$ARM" ] || exit 9
+          rm -f "$ARM"
+        fi
         for i in $(seq 1 100); do kill -0 "$PID" 2>/dev/null || break; sleep 0.3; done
+        # Never rename a bundle while its old process is still using it.
+        kill -0 "$PID" 2>/dev/null && exit 6
         OLD="${TARGET}.old-ter-update"
-        rm -rf "$OLD"
-        mv "$TARGET" "$OLD" || exit 1
-        if mv "$NEW" "$TARGET"; then
-          rm -rf "$OLD"
-          xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null
-        else
+        PENDING="${TARGET}.pending-ter-update"
+        # An unconfirmed earlier update must remain available for recovery.
+        [ ! -e "$OLD" ] && [ ! -L "$OLD" ] || exit 7
+        [ -d "$NEW" ] && [ -d "$TARGET" ] || exit 1
+        (umask 077; set -C; printf '%s\n%s\n' "$VERSION" "$$" > "$PENDING") || exit 8
+        if ! mv "$TARGET" "$OLD"; then rm -f "$PENDING"; exit 1; fi
+        if ! mv "$NEW" "$TARGET"; then
           mv "$OLD" "$TARGET"
+          rm -f "$PENDING"
           exit 2
         fi
-        [ "$DOOPEN" = "1" ] && open "$TARGET"
+        xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
+        if [ "$DOOPEN" = "1" ] && ! /usr/bin/open "$TARGET"; then
+          # Preserve the rejected new bundle and restore the known working one.
+          if mv "$TARGET" "${TARGET}.failed-ter-update.$$"; then
+            mv "$OLD" "$TARGET" || exit 4
+            rm -f "$PENDING"
+          fi
+          exit 3
+        fi
+        # Only the new app's rendered main window may confirm startup and
+        # remove OLD; an accepted LaunchServices request is not confirmation.
         exit 0
         """;
+
+    /// <summary>Called after a visible main window has rendered, never during static startup.
+    /// The marker contains only a version and helper PID, never a deletion path. A missing/mismatched or
+    /// linked marker/backup is retained for recovery rather than guessed at.</summary>
+    public static bool ConfirmMacStartup(string bundle, string runningVersion)
+    {
+        var pending = bundle + ".pending-ter-update";
+        var old = bundle + ".old-ter-update";
+        try
+        {
+            if (!bundle.EndsWith(".app", StringComparison.Ordinal) || !Directory.Exists(old)
+                || new DirectoryInfo(old).LinkTarget != null || !File.Exists(pending)
+                || new FileInfo(pending).LinkTarget != null || new FileInfo(pending).Length > 64)
+                return false;
+            var receipt = File.ReadAllLines(pending);
+            if (receipt.Length != 2 || !int.TryParse(receipt[1], out var helperPid) || helperPid <= 0)
+                return false;
+            var version = receipt[0];
+            // Never race the still-running helper's possible rollback. If this
+            // first rendered frame is early, retain OLD until a later clean startup.
+            if (ProcessIsAlive(helperPid)) return false;
+            var (_, installedVersion) = ReadPlist(File.ReadAllText(Path.Combine(bundle, "Contents", "Info.plist")));
+            if (TermitusUpdateManifest.ParseVersion(version) == null || version != runningVersion || version != installedVersion)
+                return false;
+            if (!OperatingSystem.IsWindows() && (File.GetUnixFileMode(pending) != (UnixFileMode.UserRead | UnixFileMode.UserWrite)
+                || !MarkerBelongsToCurrentUser(pending)))
+                return false;
+            Directory.Delete(old, true);
+            File.Delete(pending);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            Logging.SaveLog($"{_tag}: startup confirmation deferred ({ex.GetType().Name})");
+            return false;
+        }
+    }
+
+    private static bool ProcessIsAlive(int pid)
+    {
+        try { using var process = Process.GetProcessById(pid); return !process.HasExited; }
+        catch (ArgumentException) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    private static bool MarkerBelongsToCurrentUser(string marker)
+    {
+        // Fixed executable + argument-list: no marker text is interpreted as a command.
+        var psi = new ProcessStartInfo("/usr/bin/stat")
+        {
+            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add(OperatingSystem.IsMacOS() ? "-f" : "-c");
+        psi.ArgumentList.Add(OperatingSystem.IsMacOS() ? "%Su" : "%U");
+        psi.ArgumentList.Add(marker);
+        using var process = Process.Start(psi);
+        if (process == null) return false;
+        if (!process.WaitForExit(2000))
+        {
+            try { process.Kill(true); } catch (InvalidOperationException) { }
+            return false;
+        }
+        return process.ExitCode == 0 && process.StandardOutput.ReadToEnd().Trim() == Environment.UserName;
+    }
 
     /// <summary>The .app that is running now (…/TER.app), or null when not run from a bundle (dev build).</summary>
     public static string? CurrentBundle()
@@ -708,8 +806,8 @@ public static class TermitusUpdater
         }
     }
 
-    /// <summary>Starts the detached swap helper. The caller must quit TER right after.</summary>
-    public static bool StartSwap(string stagedApp, string targetApp, bool openAfter, string? expectedTreeHash = null)
+    /// <summary>Starts and checks the detached waiting helper. Clean up the connection, call ArmSwap, then quit.</summary>
+    public static bool StartSwap(string stagedApp, string targetApp, bool openAfter, string? expectedTreeHash = null, string? version = null)
     {
         try
         {
@@ -719,21 +817,65 @@ public static class TermitusUpdater
                 Logging.SaveLog($"{_tag}: the staged app changed before the swap; refusing");
                 return false;
             }
+            if (TermitusUpdateManifest.ParseVersion(version) == null
+                || ReadPlist(File.ReadAllText(Path.Combine(stagedApp, "Contents", "Info.plist"))).Version != version)
+                return false;
             var script = Path.Combine(Path.GetDirectoryName(stagedApp)!, "swap.sh");
+            var ready = Path.Combine(Path.GetDirectoryName(stagedApp)!, "swap-ready-" + Guid.NewGuid().ToString("N"));
+            var arm = ready + ".arm";
             File.WriteAllText(script, SwapScript.Replace("\r\n", "\n"));
             var psi = new ProcessStartInfo("/usr/bin/nohup") { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
-            foreach (var a in new[] { "/bin/bash", script, Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture), stagedApp, targetApp, openAfter ? "1" : "0" })
+            foreach (var a in new[] { "/bin/bash", script, Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture), stagedApp, targetApp, openAfter ? "1" : "0", version ?? string.Empty, ready, arm })
             {
                 psi.ArgumentList.Add(a);
             }
-            Process.Start(psi);
-            return true;
+            var helper = Process.Start(psi);
+            if (helper == null) return false;
+            var deadline = Stopwatch.StartNew();
+            while (deadline.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                if (File.Exists(ready))
+                {
+                    File.Delete(ready);
+                    if (helper.HasExited) { helper.Dispose(); return false; }
+                    _swapHelper = helper;
+                    _swapArmFile = arm;
+                    return true;
+                }
+                if (helper.HasExited) { helper.Dispose(); return false; }
+                Thread.Sleep(25);
+            }
+            try { helper.Kill(true); } catch (InvalidOperationException) { }
+            helper.Dispose();
+            return false;
         }
         catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
         {
             Logging.SaveLog($"{_tag}: swap start failed ({ex.GetType().Name})");
             return false;
         }
+    }
+
+    /// <summary>Arm the already-ready helper only after VPN/core cleanup completed.
+    /// If cleanup throws, this is never called and the helper times out without touching either app.</summary>
+    public static bool ArmSwap()
+    {
+        var helper = _swapHelper;
+        var arm = _swapArmFile;
+        _swapHelper = null;
+        _swapArmFile = null;
+        try
+        {
+            if (helper == null || arm == null || helper.HasExited) return false;
+            using (new FileStream(arm, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
+            return !helper.HasExited;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Logging.SaveLog($"{_tag}: swap arming failed ({ex.GetType().Name})");
+            return false;
+        }
+        finally { helper?.Dispose(); }
     }
 
     #endregion macOS install
