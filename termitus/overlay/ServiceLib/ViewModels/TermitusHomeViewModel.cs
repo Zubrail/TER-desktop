@@ -474,6 +474,15 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             _choice = TermitusLocations.LoadChoice();
             var auto = _choice == TermitusLocations.AutoKey;
             OnUi(() => IsAutoChoice = auto);
+            try
+            {
+                await TermitusSubscriptionRefresh.UpgradeExistingAsync(_config);
+            }
+            catch (Exception ex)
+            {
+                // A settings write failure must not prevent the app or an existing VPN from starting.
+                Logging.SaveLog($"{_tag}: subscription refresh setup failed ({ex.GetType().Name})");
+            }
             var hasProfiles = await HasProfilesAsync();
 
             // Security defaults (SECURITY.md): no access log, loopback-only inbound.

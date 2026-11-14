@@ -531,3 +531,20 @@ fi
 echo
 echo "Готово. Проверь сборку:  cd $ROOT && dotnet build v2rayN.Desktop/v2rayN.Desktop.csproj -c Release"
 echo "Откатить всё:  найди *.bak рядом с изменёнными файлами и верни их."
+
+# TER 0.6.8: new first-party subscriptions must opt into the existing scheduler.
+if ! grep -q 'TermitusSubscriptionRefresh.DefaultInterval(url)' "$CH"; then
+  perl -0777 -pi -e 's{(Id = string.Empty,\n            Url = url)(\n        \};)}{$1,\n            AutoUpdateInterval = TermitusSubscriptionRefresh.DefaultInterval(url)$2}' "$CH"
+  grep -q 'TermitusSubscriptionRefresh.DefaultInterval(url)' "$CH" || { echo 'ERROR: subscription interval patch anchor missing'; exit 1; }
+fi
+
+# TER 0.6.8: scheduled list refresh must not restart an unchanged active tunnel.
+if ! grep -q 'TermitusSubscriptionRefresh.BeginScheduled' "$TM"; then
+  perl -0777 -pi -e 's{(        foreach \(var item in lstSubs\)\n        \{\n)}{$1            var activeBefore = await AppManager.Instance.GetProfileItem(_config.IndexId);\n            using var refreshScope = TermitusSubscriptionRefresh.BeginScheduled(activeBefore, _config.IndexId);\n}' "$TM"
+  grep -q 'TermitusSubscriptionRefresh.BeginScheduled' "$TM" || { echo 'ERROR: scheduled refresh patch anchor missing'; exit 1; }
+fi
+MW="$ROOT/ServiceLib/ViewModels/MainWindowViewModel.cs"
+if ! grep -q 'TermitusSubscriptionRefresh.KeepScheduledConnection' "$MW"; then
+  perl -0777 -pi -e 's~(            // If indexId changed or subIndexId is empty, directly reload\.\n)~            var selectedAfter = await AppManager.Instance.GetProfileItem(_config.IndexId);\n            if (!TermitusSubscriptionRefresh.KeepScheduledConnection(_config.IndexId, selectedAfter))\n            {\n$1~; s~(            if \(_config\.UiItem\.EnableAutoAdjustMainLvColWidth\))~            }\n\n$1~' "$MW"
+  grep -q 'TermitusSubscriptionRefresh.KeepScheduledConnection' "$MW" || { echo 'ERROR: active tunnel preservation patch anchor missing'; exit 1; }
+fi
