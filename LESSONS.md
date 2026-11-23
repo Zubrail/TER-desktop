@@ -1,5 +1,17 @@
 # Уроки TER — что уже ломалось и как не повторить (Mac → Windows → Android)
 
+## Windows acceptance, 14 November 2026 (candidate, not a published release)
+
+On Windows 11 ARM running the x64 0.6.8 candidate, an exact verified executable crashed during text layout: `SkiaApi.sk_stream_read → SkiaTypeface.TryGetStream → TryCreateSyntheticGlyphTypeface`, access violation C0000005. Selecting the installed Segoe UI family for TER's own Windows view passed that startup point: the process stayed alive, the log confirmed the family, and the actual first-run screen was visible through UTM. This is a scoped startup result, not proof that every screen, native x64 computer, VPN or updater works. macOS keeps Helvetica Neue; Linux keeps its existing default. Full Windows navigation/update/rollback acceptance remains required.
+
+The native Windows test run exposed eight false `BadSource` failures in the update executor's fake filesystem: fixture keys used `/`, while Windows `Path.Combine` supplied `\\`. Normalize separators in the fake filesystem only; retain the failure/rollback assertions and rerun the same suite on Windows. The first native result was 420/428, not a pass; the corrected fixture passed 428/428 on macOS before the Windows rerun.
+
+Final scoped unit result: all 428 tests passed on Windows x64 under the VM's ordinary interactive user with `--maximum-parallel-tests 1` (32.712s), TRX failed=0 and actual exit=0. The same suite passed on macOS (3.993s). Parallel Windows runs had loopback/IPC timing failures; direct SSH execution was elevated and correctly failed the non-elevated precondition test. Keep those limits documented; do not remove assertions or silently treat an administrative run as the ordinary-user case. Build nested PowerShell commands from separately encoded text: otherwise `$LASTEXITCODE` can interpolate in the outer shell, yielding a false exit receipt or a parse error. The TRX counters and the real child exit must both agree.
+
+The actual Windows apply helper was then run as the limited user on separate full copies. Update from the preserved 0.6.5 fixture to the font candidate produced all 16 expected files with matching SHA256. In a second fixture, holding an added source marker with `FileShare.None` forced copying to fail after the old directory was renamed: the helper reported `RolledBack`, restored version 0.6.5 and the exact original executable hash. Original installs and the pre-test AppData backup were preserved. This verifies the helper's native filesystem update/rollback paths; it does not verify the public 0.6.6 client's download flow or a complete VPN session.
+
+After the Mac disk filled during VM testing, an initially extracted EXE and a separate test ZIP differed from their original hashes. A second extraction of the intact release ZIP verified all 16 members, yet still reproduced the font crash. Treat corrupted fixtures and the independently reproduced application crash separately. Check transfer hashes and extracted contents before blaming the app; preserve existing backups and published artifacts. The disk-full event is a possible cause of corruption, not an established diagnosis.
+
 Живой список. Каждая новая находка — сюда, с колонкой «что значит для других платформ».
 Перед выпуском на новой платформе пройти ВЕСЬ список (и WINDOWS_TEST_PLAN.md).
 
@@ -65,3 +77,9 @@
 
 
 27.10.2026: Native UI smoke at780x600 revealed fixed560px page containers overflowing the available532px beside the sidebar. Use MaxWidth plus stretch and16px side margins for picker/settings/check/account/support; verify both780x600 and1000x700 with populated synthetic profiles. Do not treat an empty-list screenshot as proof of scrollbar layout.
+
+23.11.2026: upstream AddBatchServers удалял прежние профили до завершения
+парсинга. При неуспешной замене восстанавливать исходный список/выбор; проверять
+реальную SQLite и HTML/503 с прежним подключением. Время попытки не равно
+времени успешного обновления. Это общая логика Mac/Windows; Android использует
+другой импорт и требует отдельной приёмки, этот desktop патч его не меняет.

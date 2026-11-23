@@ -1124,8 +1124,16 @@
                         FontWeight="Bold"
                         Foreground="{DynamicResource TermText}"
                         Text="{Binding Loc.PickerTitle}" />
+                </Grid>
+
+                <StackPanel Grid.Row="1" Margin="0,12,0,14" Spacing="8">
+                    <TextBlock FontSize="13" Foreground="{DynamicResource TermMuted}" Text="{Binding Loc.PickerHint}" TextWrapping="Wrap" />
+                    <WrapPanel Orientation="Horizontal">
+                        <Button Margin="0,0,8,6" Padding="14,8" Background="{DynamicResource TermSurface}" BorderBrush="{DynamicResource TermLine}" BorderThickness="1" CornerRadius="18" Command="{Binding RefreshServersCmd}" IsEnabled="{Binding !IsServerRefreshing}">
+                            <TextBlock Text="{Binding Loc.RefreshServers}" Foreground="{DynamicResource TermText}" FontSize="13" />
+                        </Button>
                     <Button
-                        Grid.Column="2"
+                        Margin="0,0,0,6"
                         Padding="14,8"
                         Background="{DynamicResource TermSurface}"
                         BorderBrush="{DynamicResource TermLine}"
@@ -1147,15 +1155,9 @@
                                 Text="{Binding Loc.Testing}" />
                         </Panel>
                     </Button>
-                </Grid>
-
-                <TextBlock
-                    Grid.Row="1"
-                    Margin="0,12,0,14"
-                    FontSize="13"
-                    Foreground="{DynamicResource TermMuted}"
-                    Text="{Binding Loc.PickerHint}"
-                    TextWrapping="Wrap" />
+                    </WrapPanel>
+                    <TextBlock Text="{Binding ServerRefreshStatus}" Foreground="{DynamicResource TermMuted}" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
 
                 <ScrollViewer Grid.Row="2" Padding="0,2,14,2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                     <StackPanel>

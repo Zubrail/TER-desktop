@@ -103,22 +103,26 @@ public partial class TermitusHomeView : ReactiveUserControl<TermitusHomeViewMode
     }
 
     /// <summary>
-    /// Apple-like (0.4.1): our screens use a macOS system font instead of the app-wide
+    /// Our screens use the platform system font instead of the app-wide
     /// default (upstream's bundled Noto Sans SC: regular weight only, synthesized bold, no ₽ —
     /// every "₽" went through the system font fallback = a ~300 ms stall). Only if the
     /// system font really resolves; otherwise the upstream default stays.
+    /// Windows uses Segoe UI's real weight faces too: the native Windows acceptance
+    /// run hit an access violation while Skia synthesized a fallback font weight.
     /// </summary>
     private void ApplySystemFont()
     {
-        if (!OperatingSystem.IsMacOS())
+        var systemFontName = OperatingSystem.IsWindows() ? "Segoe UI"
+            : OperatingSystem.IsMacOS() ? SystemFontName : null;
+        if (systemFontName == null)
         {
             return;
         }
         try
         {
-            var family = new FontFamily(SystemFontName);
+            var family = new FontFamily(systemFontName);
             if (FontManager.Current.TryGetGlyphTypeface(new Typeface(family), out var gt)
-                && gt.FamilyName.Equals(SystemFontName, StringComparison.OrdinalIgnoreCase))
+                && gt.FamilyName.Equals(systemFontName, StringComparison.OrdinalIgnoreCase))
             {
                 FontFamily = family;
                 Logging.SaveLog($"TER: system font '{gt.FamilyName}'");

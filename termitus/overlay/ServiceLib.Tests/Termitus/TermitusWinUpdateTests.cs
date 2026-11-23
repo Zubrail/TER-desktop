@@ -126,10 +126,15 @@ public class TermitusWinUpdateTests
         public bool CopyThrowsOther;
 
         public bool WaitForExit(int pid, TimeSpan timeout) { Log.Add("wait"); return OldExits; }
-        public bool Exists(string path) => Present.Contains(path);
-        public int CountFiles(string dir) => Present.Count(x => x.StartsWith(dir + "/"));
+        // Fixtures use slash paths; production Path.Combine uses backslashes on Windows.
+        // Normalize only the fake filesystem, so native Windows runs exercise the same cases.
+        private static string FixturePath(string path) => path.Replace('\\', '/');
+        public bool Exists(string path) => Present.Contains(FixturePath(path));
+        public int CountFiles(string dir) => Present.Count(x => x.StartsWith(FixturePath(dir) + "/"));
         public void Rename(string from, string to)
         {
+            from = FixturePath(from);
+            to = FixturePath(to);
             Log.Add($"rename {from} -> {to}");
             if (RenameAlwaysFails || (RenameFailuresLeft > 0 && RenameFailuresLeft-- > 0) || (BackRenameFails && Present.Contains(to) == false && from.Contains(".old-")))
             {
@@ -143,6 +148,8 @@ public class TermitusWinUpdateTests
         }
         public void CopyTree(string from, string to)
         {
+            from = FixturePath(from);
+            to = FixturePath(to);
             Log.Add($"copy {from} -> {to}");
             if (CopyThrowsOther)
             {
@@ -171,6 +178,7 @@ public class TermitusWinUpdateTests
         }
         public void DeleteTree(string path)
         {
+            path = FixturePath(path);
             Log.Add($"delete {path}");
             foreach (var p in Present.Where(x => x == path || x.StartsWith(path + "/")).ToList())
             {
@@ -179,6 +187,7 @@ public class TermitusWinUpdateTests
         }
         public void Start(string exe)
         {
+            exe = FixturePath(exe);
             Log.Add($"start {exe}");
             if (NewStartFails && exe.StartsWith("/apps/TER") && Present.Contains("/apps/TER/NEWMARK"))
             {

@@ -213,7 +213,13 @@ public sealed partial class TermitusLocale
     public string NotResponding => S("Сейчас не отвечает", "Not responding right now");
     public string LocationDown => S("Эта локация сейчас не отвечает — выберите другую или «Авто»",
                                     "This location is not responding — pick another one or Auto");
-    public string Retest => S("Проверить скорость", "Check speed");
+    public string RefreshServers => S("Обновить серверы", "Refresh servers");
+    public string ServerListRefreshing => S("Обновляем список…", "Refreshing server list…");
+    public string ServerListAgeUnknown => S("Время обновления пока неизвестно", "Last update time is not known yet");
+    public string ServerListRefreshFailed => S("Не удалось обновить весь список. Сохранены прежние серверы неудавшихся подписок.", "Could not refresh the entire list. Previous servers of failed subscriptions were kept.");
+    public string ServerListNoFeed => S("Нет подписки TER для обновления. Ручные серверы доступны в дополнительных настройках.", "No TER subscription to refresh. Manual servers remain in advanced settings.");
+    public string ServerListUpdated(DateTimeOffset when) => S($"Последнее обновление: {when:dd.MM HH:mm}", $"Last updated: {when:yyyy-MM-dd HH:mm}");
+    public string Retest => S("Проверить отклик", "Check latency");
     public string Testing => S("Проверяем…", "Checking…");
     public string Back => S("Назад", "Back");
 
@@ -304,7 +310,7 @@ public sealed partial class TermitusLocale
     public string TipConnect => S("Включить или выключить защиту", "Turn protection on or off");
     public string TipLocation => S("Выбрать страну подключения", "Choose the country");
     public string TipSubChip => S("Аккаунт: срок подписки, трафик, устройства", "Account: subscription term, traffic, devices");
-    public string TipRetest => S("Заново измерить скорость всех стран", "Measure every country again");
+    public string TipRetest => S("Проверить отклик через каждый сервер; это не замер Мбит/с", "Check response through each server; this is not a Mbps test");
 
     // Subscription chip / account
     public string Account => S("Аккаунт", "Account");

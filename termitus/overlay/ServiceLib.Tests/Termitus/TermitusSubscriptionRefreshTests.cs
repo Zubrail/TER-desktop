@@ -46,3 +46,47 @@ public class TermitusSubscriptionRefreshTests
         await TermitusSubscriptionRefresh.KeepScheduledConnection("selected", profile).Should().BeFalse();
     }
 }
+
+[NotInParallel("termitus-routing-db")]
+public class TermitusSubscriptionReplacementTests
+{
+    [Test]
+    public async Task MalformedReplacementPreservesExistingUriProfileAndSelection()
+    {
+        var config = ServiceLib.Tests.CoreConfig.CoreConfigTestFactory.CreateConfig();
+        ServiceLib.Tests.CoreConfig.CoreConfigTestFactory.BindAppManagerConfig(config);
+        SQLiteHelper.Instance.CreateTable<ProfileItem>();
+        SQLiteHelper.Instance.CreateTable<SubItem>();
+        var sub = "refresh-invalid-" + Guid.NewGuid().ToString("N");
+        var id = Guid.NewGuid().ToString("N");
+        var old = new ProfileItem { IndexId = id, Subid = sub, IsSub = true, ConfigType = EConfigType.VLESS,
+            Address = "203.0.113.5", Port = 443, Password = "synthetic", Network = "grpc", Remarks = "Fixture France" };
+        await SQLiteHelper.Instance.InsertAsync(old);
+        config.IndexId = id;
+        try
+        {
+            var ret = await ConfigHandler.AddBatchServers(config, "<html>Temporary upstream error</html>", sub, true);
+            await Assert.That(ret <= 0).IsTrue();
+            var profiles = await AppManager.Instance.ProfileItems(sub);
+            await Assert.That(profiles.Count).IsEqualTo(1);
+            await Assert.That(profiles[0].IndexId).IsEqualTo(id);
+            await Assert.That(profiles[0].Password).IsEqualTo("synthetic");
+            await Assert.That(config.IndexId).IsEqualTo(id);
+        }
+        finally { await SQLiteHelper.Instance.DeleteAsync(old); }
+    }
+
+    [Test]
+    public async Task SuccessMetadataIsUnknownUntilParsedAndDoesNotStoreFeedUrl()
+    {
+        var sub = "refresh-metadata-" + Guid.NewGuid().ToString("N");
+        await Assert.That(TermitusSubscriptionRefresh.LastSuccess([sub])).IsNull();
+        TermitusSubscriptionRefresh.RecordSuccess(sub);
+        var stamp = TermitusSubscriptionRefresh.LastSuccess([sub]);
+        await Assert.That(stamp.HasValue).IsTrue();
+        await Assert.That(stamp!.Value > DateTimeOffset.UtcNow.AddMinutes(-1)).IsTrue();
+        await Assert.That(TermitusSubscriptionRefresh.LastSuccess([sub, "never-refreshed-fixture"])).IsNull();
+        var cache = File.ReadAllText(Utils.GetConfigPath("ter-server-refresh.json"));
+        await Assert.That(cache.Contains("https://")).IsFalse();
+    }
+}

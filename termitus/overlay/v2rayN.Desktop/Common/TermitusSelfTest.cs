@@ -148,6 +148,14 @@ internal static class TermitusSelfTest
                     Exec(vm.ImportSubscriptionCmd);
                     break;
 
+                case "refresh-servers":
+                    Exec(vm.RefreshServersCmd);
+                    break;
+
+                case "dump-servers":
+                    Log($"servers {arg}: refreshing={vm.IsServerRefreshing} count={vm.Locations.Count} status={vm.ServerRefreshStatus}");
+                    break;
+
                 case "retry-account":
                     Exec(vm.RetryAccountCmd);
                     break;

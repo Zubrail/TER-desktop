@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.Json;
 
 namespace ServiceLib.Services;
 
@@ -9,6 +10,47 @@ public static class TermitusSubscriptionRefresh
 {
     public const int IntervalMinutes = 120;
     private const string Marker = "ter-subscription-refresh-068.txt";
+
+    private const string SuccessFile = "ter-server-refresh.json";
+    private static readonly object SuccessLock = new();
+    public static readonly SemaphoreSlim UpdateLock = new(1, 1);
+    public static event Action? Changed;
+
+    private static Dictionary<string, DateTimeOffset> ReadSuccess()
+    {
+        try { return JsonSerializer.Deserialize<Dictionary<string, DateTimeOffset>>(File.ReadAllText(Utils.GetConfigPath(SuccessFile))) ?? []; }
+        catch { return []; } // Missing/corrupt metadata is unknown, never a failed server.
+    }
+
+    public static void RecordSuccess(string subId)
+    {
+        lock (SuccessLock)
+        {
+            var values = ReadSuccess();
+            values[subId] = DateTimeOffset.UtcNow;
+            var path = Utils.GetConfigPath(SuccessFile);
+            var tmp = path + ".tmp";
+            try
+            {
+                File.WriteAllText(tmp, JsonSerializer.Serialize(values));
+                if (!OperatingSystem.IsWindows())
+                    File.SetUnixFileMode(tmp, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                File.Move(tmp, path, true);
+            }
+            catch { /* Do not turn a successful import into a failure due to UI metadata. */ }
+        }
+        Changed?.Invoke();
+    }
+
+    public static DateTimeOffset? LastSuccess(IEnumerable<string> subIds)
+    {
+        lock (SuccessLock)
+        {
+            var ids = subIds.ToArray();
+            var values = ReadSuccess();
+            return ids.Length == 0 || ids.Any(id => !values.ContainsKey(id)) ? null : ids.Min(id => values[id]);
+        }
+    }
 
     public static int DefaultInterval(string? url)
     {

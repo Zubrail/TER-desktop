@@ -58,6 +58,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
     // Account page (0.4): data from the subscription response headers + optional /info.
     private System.Threading.Timer? _accountTimer;
     private int _accountRefreshRunning;
+    private int _serverRefreshRunning;
     private DateTime _accountLastManual = DateTime.MinValue;
     private volatile string? _renewUrl;
     private volatile bool _accountOffline;     // last refresh got no HTTP answer at all (0.4.1)
@@ -153,6 +154,8 @@ public partial class TermitusHomeViewModel : MyReactiveObject
     [Reactive] public partial bool RouteAll { get; set; }
     [Reactive] public partial string AppVersion { get; set; }
     [Reactive] public partial bool IsTesting { get; set; }
+    [Reactive] public partial bool IsServerRefreshing { get; set; }
+    [Reactive] public partial string ServerRefreshStatus { get; set; } = string.Empty;
     [Reactive] public partial bool IsAutoChoice { get; set; }
     [Reactive] public partial string AutoCaption { get; set; }
     public ObservableCollection<TermitusLocationRow> Locations { get; } = [];
@@ -216,6 +219,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
     public ReactiveCommand<RxVoid, RxVoid> OpenPickerCmd { get; }
     public ReactiveCommand<RxVoid, RxVoid> ClosePickerCmd { get; }
     public ReactiveCommand<RxVoid, RxVoid> RetestCmd { get; }
+    public ReactiveCommand<RxVoid, RxVoid> RefreshServersCmd { get; }
     public ReactiveCommand<string, RxVoid> SelectLocationCmd { get; }
     public ReactiveCommand<string, RxVoid> NavCmd { get; }
     public ReactiveCommand<string, RxVoid> SetRoutingCmd { get; }
@@ -447,6 +451,8 @@ public partial class TermitusHomeViewModel : MyReactiveObject
             }
         });
         RetestCmd = ReactiveCommand.CreateFromTask(() => Bg(RetestAsync));
+        RefreshServersCmd = ReactiveCommand.CreateFromTask(() => Bg(RefreshServerListAsync));
+        TermitusSubscriptionRefresh.Changed += () => _ = Bg(ServerListChangedAsync);
         SelectLocationCmd = ReactiveCommand.CreateFromTask<string>(key => Bg(() => SelectLocationAsync(key)));
 
         TermitusAccount.Changed += () => _ = RenderAccountAsync();
@@ -573,7 +579,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
 
     private async Task ToggleConnectAsync()
     {
-        if (_busy)
+        if (_busy || IsServerRefreshing)
         {
             return;
         }
@@ -1799,7 +1805,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
     /// </summary>
     private async Task LogoutAsync()
     {
-        if (_loggingOut)
+        if (_loggingOut || IsServerRefreshing)
         {
             return;
         }
@@ -2227,7 +2233,7 @@ public partial class TermitusHomeViewModel : MyReactiveObject
 
     private async Task OpenPickerAsync()
     {
-        await BuildRowsAsync();
+        await ServerListChangedAsync();
         // First open (nothing tested yet): measure right away so the list is useful.
         if (_delays.IsEmpty)
         {
@@ -2235,9 +2241,66 @@ public partial class TermitusHomeViewModel : MyReactiveObject
         }
     }
 
+    private static bool IsRefreshFeed(SubItem item)
+        => TermitusSubscriptionRefresh.DefaultInterval(item.Url) > 0
+            || (TermitusTestHooks.IsTestInstance && Uri.TryCreate(item.Url, UriKind.Absolute, out var uri) && uri.IsLoopback);
+
+    private async Task ServerListChangedAsync()
+    {
+        // Background subscription refresh can add/remove countries while this page stays open.
+        _locations = [];
+        await BuildRowsAsync();
+        if (!IsServerRefreshing)
+        {
+            var subs = (await AppManager.Instance.SubItems() ?? []).Where(x => x.Enabled && IsRefreshFeed(x));
+            var stamp = TermitusSubscriptionRefresh.LastSuccess(subs.Select(x => x.Id));
+            OnUi(() => ServerRefreshStatus = stamp is null ? Loc.ServerListAgeUnknown : Loc.ServerListUpdated(stamp.Value.ToLocalTime()));
+        }
+    }
+
+    private async Task RefreshServerListAsync()
+    {
+        if (_busy || IsTesting || _loggingOut || Interlocked.Exchange(ref _serverRefreshRunning, 1) != 0) return;
+        OnUi(() => { IsServerRefreshing = true; ServerRefreshStatus = Loc.ServerListRefreshing; });
+        try
+        {
+            var subs = (await AppManager.Instance.SubItems() ?? []).Where(x => x.Enabled && IsRefreshFeed(x)).ToList();
+            if (subs.Count == 0)
+            {
+                OnUi(() => ServerRefreshStatus = Loc.ServerListNoFeed);
+                return;
+            }
+            var allSucceeded = true;
+            foreach (var sub in subs)
+            {
+                var success = false;
+                // Existing download/parser path, no core reload: the active session stays intact.
+                await SubscriptionHandler.UpdateProcess(_config, sub.Id, _connected, (ok, _) => { success |= ok; return Task.CompletedTask; });
+                allSucceeded &= success;
+            }
+            _locations = [];
+            _delays.Clear(); // A newly imported profile must not inherit another profile's old ping.
+            await BuildRowsAsync();
+            await _main.ProfilesViewModel.RefreshSubscriptions();
+            await _main.ProfilesViewModel.RefreshServers();
+            var stamp = TermitusSubscriptionRefresh.LastSuccess(subs.Select(x => x.Id));
+            OnUi(() => ServerRefreshStatus = !allSucceeded ? Loc.ServerListRefreshFailed : stamp is null ? Loc.ServerListAgeUnknown : Loc.ServerListUpdated(stamp.Value.ToLocalTime()));
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog($"{_tag}: server refresh failed ({ex.GetType().Name})");
+            OnUi(() => ServerRefreshStatus = Loc.ServerListRefreshFailed);
+        }
+        finally
+        {
+            Volatile.Write(ref _serverRefreshRunning, 0);
+            OnUi(() => IsServerRefreshing = false);
+        }
+    }
+
     private async Task RetestAsync()
     {
-        if (_busy || IsTesting)
+        if (_busy || IsTesting || IsServerRefreshing)
         {
             return;
         }

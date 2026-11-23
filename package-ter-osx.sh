@@ -14,6 +14,15 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 FILE_VERSION="$(tr -d ' \n' < "$HERE/VERSION")"
 VERSION="${1:-$FILE_VERSION}"
 [ "$VERSION" = "$FILE_VERSION" ] || { echo "version $VERSION != VERSION file ($FILE_VERSION): bump VERSION, re-run apply-changes.sh and publish"; exit 1; }
+# Refuse an invalid Developer ID/notary configuration before deleting build output.
+SIGN_TOOL="$HERE/termitus/tools/mac_signing.py"
+python3 "$SIGN_TOOL" preflight
+PIN_TMP=""; STAGE=""
+cleanup_signing() {
+  [ -z "$PIN_TMP" ] || rm -rf "$PIN_TMP"
+  [ -z "$STAGE" ] || rm -rf "$STAGE"
+}
+trap cleanup_signing EXIT
 PUB="$HERE/upstream/v2rayN/bin/termitus/osx-arm64"
 # 14.10: always publish fresh (a stale publish dir once shipped old code under a new version, LESSONS 29)
 rm -rf "$PUB"
@@ -25,12 +34,10 @@ PATHMAP="$UP_REAL=/src"
 # compiled in here (a hash computed at run time from the user-writable data folder would prove nothing).
 XRAY_BIN="$HERE/cores/x/xray"; SB_BIN="$(ls "$HERE"/cores/s/*/sing-box 2>/dev/null | head -1)"
 [ -f "$XRAY_BIN" ] && [ -f "$SB_BIN" ] || { echo "cores missing in $HERE/cores (cannot pin their checksums)"; exit 1; }
-# The bundle is ad-hoc signed below, which rewrites the cores' Mach-O signature: pin the hash of the SIGNED core (same file name = same
-# identifier, ad-hoc signing is deterministic). A gate after signing checks that the real .app matches.
-PIN_TMP="$(mktemp -d)"; cp "$XRAY_BIN" "$PIN_TMP/xray"; cp "$SB_BIN" "$PIN_TMP/sing-box"
-codesign --force -s - "$PIN_TMP/xray" "$PIN_TMP/sing-box" 2>/dev/null || { echo "codesign of the pinned cores failed"; exit 1; }
-CORE_HASHES="xray=$(shasum -a 256 "$PIN_TMP/xray" | cut -d' ' -f1);sing-box=$(shasum -a 256 "$PIN_TMP/sing-box" | cut -d' ' -f1)"
-rm -rf "$PIN_TMP"
+# Sign ONCE, then compile the hash of those exact signed bytes. Timestamped
+# Developer ID signatures cannot be reproduced by re-signing a second copy.
+PIN_TMP="$(mktemp -d)"
+CORE_HASHES="$(python3 "$SIGN_TOOL" prepare-cores --xray "$XRAY_BIN" --sing-box "$SB_BIN" --output "$PIN_TMP")"
 HASH_SRC="$HERE/upstream/v2rayN/ServiceLib/Services/TermitusCoreHashes.cs"
 [ -f "$HASH_SRC" ] || { echo "TermitusCoreHashes.cs missing: run apply-changes.sh first"; exit 1; }
 sed -i '' -E "s|(private const string Raw = \")[^\"]*(\";)|\1$CORE_HASHES\2|" "$HASH_SRC"
@@ -70,8 +77,8 @@ cp -R "$PUB" "$APP/Contents/MacOS"
 # finds v2rayN.dll by its embedded name, so renaming the launcher file is safe.
 mv "$APP/Contents/MacOS/v2rayN" "$APP/Contents/MacOS/TER"
 mkdir -p "$APP/Contents/MacOS/bin/xray" "$APP/Contents/MacOS/bin/sing_box"
-cp "$CORES/x/xray" "$APP/Contents/MacOS/bin/xray/xray"
-cp "$CORES"/s/*/sing-box "$APP/Contents/MacOS/bin/sing_box/sing-box"
+cp "$PIN_TMP/xray" "$APP/Contents/MacOS/bin/xray/xray"
+cp "$PIN_TMP/sing-box" "$APP/Contents/MacOS/bin/sing_box/sing-box"
 cp "$RF/geoip.dat" "$RF/geosite.dat" "$APP/Contents/MacOS/bin/"
 # Marker read by TermitusRussiaPreset.SyncBundledGeoFiles (overwrites old copies on upgrade).
 cp "$RF/RF_RELEASE" "$APP/Contents/MacOS/bin/ter-geo.version"
@@ -127,10 +134,9 @@ cat > "$APP/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-# Ad-hoc signature: Apple Silicon refuses to run unsigned arm64 code. Real
-# Developer ID signing + notarization comes later (BUILD.md section 6).
-codesign --force --deep -s - "$APP"
-codesign --verify --deep --strict "$APP" && echo "codesign (ad-hoc): ok"
+# Sign other native libraries inside-out, then the apphost/outer bundle.
+# The already signed core bytes are excluded and checked again afterwards.
+python3 "$SIGN_TOOL" sign-bundle --app "$APP" --signed-cores "$PIN_TMP"
 # D-1 gate: the cores inside the finished bundle must be exactly the ones whose hashes are compiled into the app
 for pair in "xray:$APP/Contents/MacOS/bin/xray/xray" "sing-box:$APP/Contents/MacOS/bin/sing_box/sing-box"; do
   n="${pair%%:*}"; f="${pair#*:}"
@@ -140,7 +146,10 @@ done
 echo "core pins: ok"
 
 DMG="$DIST/TER-${VERSION}-osx-arm64.dmg"
-rm -f "$DMG"
+# A failed signature/notary gate must not leave a new release-named image.
+# Preserve any previous completed artifact until the new image passes all gates.
+IMAGE="$DIST/TER-${VERSION}-osx-arm64.packaging.dmg"
+rm -f "$IMAGE"
 STAGE="$(mktemp -d)"
 cp -R "$APP" "$STAGE/"
 BG="$HERE/termitus/dmg/dmg-background.tiff"
@@ -151,13 +160,17 @@ if [ -x "$DMGBUILD" ] && [ -f "$BG" ]; then
   # automation, which timed out (-1712) with create-dmg.
   "$DMGBUILD" -s "$HERE/termitus/dmg/dmgbuild_settings.py" \
     -D app="$STAGE/TER.app" -D bg="$BG" -D icon="$APP/Contents/Resources/AppIcon.icns" \
-    "TER" "$DMG"
+    "TER" "$IMAGE"
 else
   echo "WARNING: dmgbuild venv or background missing -> plain dmg without window layout"
   ln -s /Applications "$STAGE/Applications"
-  hdiutil create -quiet -volname "TER" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+  hdiutil create -quiet -volname "TER" -srcfolder "$STAGE" -ov -format UDZO "$IMAGE"
 fi
-rm -rf "$STAGE"
-bash "$HERE/termitus/tools/verify_mac_dmg.sh" "$DMG" "$VERSION"
+rm -rf "$STAGE"; STAGE=""
+# Ad-hoc stays a local integrity build. Explicit developer-id requires Accepted
+# notarization, stapling and image assessment before the final artifact appears.
+python3 "$SIGN_TOOL" finish-dmg --dmg "$IMAGE"
+bash "$HERE/termitus/tools/verify_mac_dmg.sh" "$IMAGE" "$VERSION"
+mv -f "$IMAGE" "$DMG"
 shasum -a 256 "$DMG" | tee "$DMG.sha256"
 echo "built: $DMG"

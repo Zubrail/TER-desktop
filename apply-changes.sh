@@ -548,3 +548,52 @@ if ! grep -q 'TermitusSubscriptionRefresh.KeepScheduledConnection' "$MW"; then
   perl -0777 -pi -e 's~(            // If indexId changed or subIndexId is empty, directly reload\.\n)~            var selectedAfter = await AppManager.Instance.GetProfileItem(_config.IndexId);\n            if (!TermitusSubscriptionRefresh.KeepScheduledConnection(_config.IndexId, selectedAfter))\n            {\n$1~; s~(            if \(_config\.UiItem\.EnableAutoAdjustMainLvColWidth\))~            }\n\n$1~' "$MW"
   grep -q 'TermitusSubscriptionRefresh.KeepScheduledConnection' "$MW" || { echo 'ERROR: active tunnel preservation patch anchor missing'; exit 1; }
 fi
+
+# TER: serialize existing refresh paths, record parsed success, preserve the old list on invalid responses.
+python3 - "$ROOT" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+p = root / 'ServiceLib/Handler/SubscriptionHandler.cs'
+s = p.read_text()
+if 'TermitusSubscriptionRefresh.UpdateLock' not in s:
+    a = s.index('        await updateFunc?.Invoke(false, ResUI.MsgUpdateSubscriptionStart);')
+    b = s.index('\n    private static bool IsValidSubscription', a)
+    body = s[a:b]
+    assert body.endswith('    }\n')
+    body = body[:-6]
+    s = s[:a] + '        await TermitusSubscriptionRefresh.UpdateLock.WaitAsync();\n        try\n        {\n' + body + '\n        }\n        finally { TermitusSubscriptionRefresh.UpdateLock.Release(); }\n    }\n' + s[b:]
+if 'TermitusSubscriptionRefresh.RecordSuccess(id)' not in s:
+    anchor = '        // Update completion message\n'
+    assert anchor in s
+    s = s.replace(anchor, '        if (ret > 0) TermitusSubscriptionRefresh.RecordSuccess(id);\n\n' + anchor)
+p.write_text(s)
+p = root / 'ServiceLib/Handler/ConfigHandler.cs'
+s = p.read_text()
+if '// TER: preserve working subscription' not in s:
+    a = s.index('        var counter = 0;', s.index('public static async Task<int> AddBatchServers('))
+    b = s.index('        //Select active node', a)
+    body = s[a:b]
+    assert body.startswith('        var counter = 0;\n')
+    body = body[len('        var counter = 0;\n'):]
+    s = s[:a] + '''        var counter = 0;
+        var replacementCompleted = false;
+        try
+        {
+''' + body + '''        replacementCompleted = counter > 0;
+        }
+        finally
+        {
+            // TER: preserve working subscription after malformed/failed replacement.
+            if (!replacementCompleted && lstOriSub != null)
+            {
+                await RemoveServersViaSubid(config, subid, true);
+                await SQLiteHelper.Instance.InsertAllAsync(lstOriSub);
+                if (activeProfile != null) config.IndexId = activeProfile.IndexId;
+                await SaveConfig(config);
+            }
+        }
+
+''' + s[b:]
+p.write_text(s)
+PY
